@@ -36,6 +36,8 @@ export function Rebars() {
     const dummy = new THREE.Object3D();
     for (let i = 0; i < stirrupXs.length; i++) {
       dummy.position.set(stirrupXs[i], 0, 0);
+      // 相邻箍筋绕 y 轴旋转 180°，使弯钩开口左右交替
+      dummy.rotation.set(0, i % 2 === 0 ? 0 : Math.PI, 0);
       dummy.updateMatrix();
       m.setMatrixAt(i, dummy.matrix);
     }

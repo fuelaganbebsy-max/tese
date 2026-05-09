@@ -4,7 +4,7 @@
 
 ## 在线预览
 
-GitHub Pages: https://fuelaganbebsy-max.github.io/tese1/
+GitHub Pages: https://fuelaganbebsy-max.github.io/tese/
 
 ## 技术栈
 

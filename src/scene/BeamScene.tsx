@@ -20,8 +20,8 @@ export function BeamScene() {
       camera={{ position: [d.totalLength * 0.6, params.h * 4, camDist * 0.6], fov: 35, near: 10, far: camDist * 10 }}
       gl={{ antialias: true, logarithmicDepthBuffer: true }}
     >
-      <color attach="background" args={["#0f172a"]} />
-      <hemisphereLight args={["#ffffff", "#334155", 0.85]} />
+      <color attach="background" args={["#ffffff"]} />
+      <hemisphereLight args={["#ffffff", "#cbd5e1", 0.95]} />
       <directionalLight position={[d.totalLength, params.h * 5, params.b * 5]} intensity={0.85} />
       <directionalLight position={[-d.totalLength * 0.3, params.h * 3, -params.b * 3]} intensity={0.35} />
 
@@ -34,9 +34,9 @@ export function BeamScene() {
         position={[d.totalLength / 2, 0, 0]}
         args={[d.totalLength * 1.5, d.totalLength * 1.5]}
         cellSize={500}
-        cellColor="#334155"
+        cellColor="#d1d5db"
         sectionSize={2000}
-        sectionColor="#64748b"
+        sectionColor="#94a3b8"
         infiniteGrid={false}
         fadeDistance={d.totalLength * 2}
       />
