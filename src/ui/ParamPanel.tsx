@@ -165,6 +165,7 @@ export function ParamPanel() {
         <div className="font-medium text-slate-200">视图开关</div>
         {([
           ['showConcrete', '混凝土'],
+          ['showColumns', '柱'],
           ['showLongitudinal', '纵筋'],
           ['showStirrups', '箍筋'],
         ] as const).map(([k, label]) => (

@@ -5,6 +5,7 @@ import { useBeamStore } from '../store/beamStore';
 import { derive } from '../domain/kl/derive';
 import { Concrete } from './Concrete';
 import { Rebars } from './Rebars';
+import { Columns } from './Columns';
 
 export function BeamScene() {
   const params = useBeamStore((s) => s.params);
@@ -27,6 +28,7 @@ export function BeamScene() {
 
       <group>
         <Concrete />
+        <Columns />
         <Rebars />
       </group>
 

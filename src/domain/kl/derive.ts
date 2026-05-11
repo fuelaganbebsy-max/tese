@@ -122,8 +122,8 @@ export function defaultBeam(): BeamParams {
     spans: [
       {
         ln: 6000,
-        hcLeft: 500,
-        hcRight: 500,
+        hcLeft: 600,
+        hcRight: 600,
         bottom: { grade: 'HRB400', diameter: 25, count: 4 },
         topLeftSupport: { grade: 'HRB400', diameter: 25, count: 2 },
         topRightSupport: { grade: 'HRB400', diameter: 25, count: 2 },

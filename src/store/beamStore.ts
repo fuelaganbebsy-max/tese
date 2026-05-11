@@ -7,6 +7,7 @@ interface ViewState {
   showStirrups: boolean;
   showLongitudinal: boolean;
   showAnnotations: boolean;
+  showColumns: boolean;
 }
 
 interface BeamStore {
@@ -19,7 +20,7 @@ interface BeamStore {
 
 export const useBeamStore = create<BeamStore>((set) => ({
   params: defaultBeam(),
-  view: { showConcrete: true, showStirrups: true, showLongitudinal: true, showAnnotations: true },
+  view: { showConcrete: true, showStirrups: true, showLongitudinal: true, showAnnotations: true, showColumns: true },
   setParams: (updater) => set((s) => ({ params: updater(s.params) })),
   setView: (patch) => set((s) => ({ view: { ...s.view, ...patch } })),
   reset: () => set({ params: defaultBeam() }),
