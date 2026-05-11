@@ -1,4 +1,4 @@
-import { bendAnchorStraightMin, bendAnchorVertical, densifiedZoneLength, laE } from '../codes/16G101';
+import { bendAnchorStraightMin, bendAnchorVertical, densifiedZoneLength, laE } from '../codes/22G101';
 import type { BeamParams } from './types';
 
 export interface DerivedSpan {

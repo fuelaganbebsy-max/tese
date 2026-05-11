@@ -9,3 +9,9 @@ dist-ssr
 !.env.example
 .idea
 .vscode
+
+# TS incremental build cache
+*.tsbuildinfo
+
+# Design reference (local only)
+stitch_rebarvisual_ai_dashboard/

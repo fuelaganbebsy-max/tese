@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { BeamParams } from '../domain/kl/types';
-import { stirrupHookStraight } from '../domain/codes/16G101';
+import { stirrupHookStraight } from '../domain/codes/22G101';
 import { tubeFromPolyline } from './rebarPath';
 
 /**
