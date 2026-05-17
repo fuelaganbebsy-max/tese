@@ -15,6 +15,7 @@ function NumField({
   onChange,
   step = 1,
   min = 0,
+  max,
   unit,
 }: {
   label: string;
@@ -22,19 +23,29 @@ function NumField({
   onChange: (v: number) => void;
   step?: number;
   min?: number;
+  max?: number;
   unit?: string;
 }) {
+  const isInvalid = value < min || (max !== undefined && value > max);
   return (
     <div className="flex flex-col gap-1">
       <label className="font-body-sm text-[11px] text-on-surface-variant">{label}</label>
       <div className="relative">
         <input
           type="number"
-          className="w-full bg-surface-container-lowest border border-white/10 rounded px-3 py-1.5 font-label-numeric text-label-numeric text-on-surface focus:border-primary-fixed-dim focus:ring-1 focus:ring-primary-fixed-dim outline-none text-right pr-10 font-mono"
+          className={`w-full bg-surface-container-lowest border rounded px-3 py-1.5 font-label-numeric text-label-numeric text-on-surface focus:ring-1 outline-none text-right pr-10 font-mono transition-colors ${
+            isInvalid
+              ? 'border-error/60 focus:border-error focus:ring-error/40 text-error'
+              : 'border-white/10 focus:border-primary-fixed-dim focus:ring-primary-fixed-dim'
+          }`}
           value={value}
           step={step}
           min={min}
-          onChange={(e) => onChange(Number(e.target.value))}
+          max={max}
+          onChange={(e) => {
+            const v = Number(e.target.value);
+            onChange(v);
+          }}
         />
         {unit && (
           <span className="absolute right-3 top-1/2 -translate-y-1/2 font-label-numeric text-[11px] text-on-surface-variant pointer-events-none font-mono">
@@ -42,6 +53,11 @@ function NumField({
           </span>
         )}
       </div>
+      {isInvalid && (
+        <span className="text-[10px] text-error/80">
+          {value < min ? `最小值 ${min}` : `最大值 ${max}`}
+        </span>
+      )}
     </div>
   );
 }
@@ -151,9 +167,9 @@ function SpanEditor({
       </div>
       <div className="p-3 space-y-3">
         <div className="grid grid-cols-3 gap-2">
-          <NumField label="净跨 ln" value={span.ln} onChange={(v) => onChange({ ...span, ln: v })} step={100} unit="mm" />
-          <NumField label="左支座 hc" value={span.hcLeft} onChange={(v) => onChange({ ...span, hcLeft: v })} step={50} unit="mm" />
-          <NumField label="右支座 hc" value={span.hcRight} onChange={(v) => onChange({ ...span, hcRight: v })} step={50} unit="mm" />
+          <NumField label="净跨 ln" value={span.ln} onChange={(v) => onChange({ ...span, ln: v })} step={100} min={1000} max={15000} unit="mm" />
+          <NumField label="左支座 hc" value={span.hcLeft} onChange={(v) => onChange({ ...span, hcLeft: v })} step={50} min={200} max={1200} unit="mm" />
+          <NumField label="右支座 hc" value={span.hcRight} onChange={(v) => onChange({ ...span, hcRight: v })} step={50} min={200} max={1200} unit="mm" />
         </div>
         <BundleEditor label="下部纵筋" value={span.bottom} onChange={(b) => onChange({ ...span, bottom: b })} />
         <BundleEditor
@@ -187,6 +203,8 @@ function SpanEditor({
               value={span.stirrup.spacingDense}
               onChange={(v) => onChange({ ...span, stirrup: { ...span.stirrup, spacingDense: v } })}
               step={25}
+              min={50}
+              max={200}
               unit="mm"
             />
             <NumField
@@ -194,6 +212,8 @@ function SpanEditor({
               value={span.stirrup.spacingSparse}
               onChange={(v) => onChange({ ...span, stirrup: { ...span.stirrup, spacingSparse: v } })}
               step={25}
+              min={50}
+              max={400}
               unit="mm"
             />
           </div>
@@ -281,7 +301,7 @@ function ParamContent() {
               <span className="font-label-numeric text-primary-fixed-dim font-mono">{params.b} mm</span>
             </label>
             <input
-              type="range" min={150} max={800} value={params.b} step={50}
+              type="range" min={150} max={800} value={Math.max(150, Math.min(800, params.b))} step={50}
               onChange={(e) => update({ b: Number(e.target.value) })}
               className="w-full"
             />
@@ -292,7 +312,7 @@ function ParamContent() {
               <span className="font-label-numeric text-primary-fixed-dim font-mono">{params.h} mm</span>
             </label>
             <input
-              type="range" min={200} max={1200} value={params.h} step={50}
+              type="range" min={200} max={1200} value={Math.max(200, Math.min(1200, params.h))} step={50}
               onChange={(e) => update({ h: Number(e.target.value) })}
               className="w-full"
             />
@@ -332,7 +352,9 @@ function ParamContent() {
                 type="number"
                 className="w-full bg-surface-container-lowest border border-white/10 rounded px-3 py-1.5 font-label-numeric text-label-numeric text-on-surface focus:border-primary-fixed-dim focus:ring-1 focus:ring-primary-fixed-dim outline-none text-right pr-10 font-mono"
                 value={params.cover}
-                onChange={(e) => update({ cover: Number(e.target.value) })}
+                min={15}
+                max={50}
+                onChange={(e) => update({ cover: Math.max(15, Math.min(50, Number(e.target.value))) })}
               />
               <span className="absolute right-3 top-1/2 -translate-y-1/2 font-label-numeric text-[11px] text-on-surface-variant pointer-events-none font-mono">mm</span>
             </div>
@@ -465,6 +487,18 @@ export function ParamPanel() {
 
       {/* Content */}
       {activeTab === 'params' ? <ParamContent /> : <AiCopilot />}
+
+      {/* Diagnostics Footer */}
+      <div className="px-2 py-2 mt-auto border-t border-white/10 bg-surface-container-highest/50 shrink-0">
+        <a
+          href="#"
+          onClick={(e) => e.preventDefault()}
+          className="flex flex-col items-center justify-center text-on-surface-variant p-2 hover:bg-white/5 transition-all font-body-sm text-body-sm rounded active:scale-95"
+        >
+          <span className="material-symbols-outlined text-[18px] mb-1">monitoring</span>
+          诊断 Diagnostics
+        </a>
+      </div>
     </aside>
   );
 }

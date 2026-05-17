@@ -6,6 +6,7 @@ export function ViewportHud() {
   const params = useBeamStore((s) => s.params);
   const view = useBeamStore((s) => s.view);
   const setView = useBeamStore((s) => s.setView);
+  const setCameraCommand = useBeamStore((s) => s.setCameraCommand);
   const d = useMemo(() => derive(params), [params]);
 
   const stirrupCount = d.spans.reduce((s, sp) => s + sp.stirrupXs.length, 0);
@@ -25,13 +26,15 @@ export function ViewportHud() {
         {/* Right: View buttons */}
         <div className="pointer-events-auto flex flex-col gap-2">
           <button
-            className="w-8 h-8 rounded-DEFAULT bg-surface-container-highest/80 backdrop-blur-md border border-white/10 flex items-center justify-center text-on-surface hover:text-primary-fixed-dim transition-colors"
+            onClick={() => setCameraCommand('top')}
+            className="w-8 h-8 rounded-DEFAULT bg-surface-container-highest/80 backdrop-blur-md border border-white/10 flex items-center justify-center text-on-surface hover:text-primary-fixed-dim transition-colors active:scale-95"
             title="Top View"
           >
             <span className="font-label-numeric text-label-numeric text-[10px] font-bold font-mono">TOP</span>
           </button>
           <button
-            className="w-8 h-8 rounded-DEFAULT bg-surface-container-highest/80 backdrop-blur-md border border-white/10 flex items-center justify-center text-on-surface hover:text-primary-fixed-dim transition-colors"
+            onClick={() => setCameraCommand('reset')}
+            className="w-8 h-8 rounded-DEFAULT bg-surface-container-highest/80 backdrop-blur-md border border-white/10 flex items-center justify-center text-on-surface hover:text-primary-fixed-dim transition-colors active:scale-95"
             title="Reset Camera"
           >
             <span className="material-symbols-outlined text-[16px]">videocam</span>

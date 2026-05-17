@@ -13,12 +13,13 @@ export function Columns() {
       {cols.map((c, i) => (
         <mesh key={i} geometry={c.geometry} renderOrder={2}>
           <meshStandardMaterial
-            color="#a8a8a8"
+            color="#6b7d80"
             transparent
-            opacity={0.32}
+            opacity={0.25}
             depthWrite={false}
-            roughness={0.9}
-            metalness={0.0}
+            roughness={0.92}
+            metalness={0.05}
+            envMapIntensity={0.3}
           />
         </mesh>
       ))}

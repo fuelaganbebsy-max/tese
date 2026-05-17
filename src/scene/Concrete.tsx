@@ -10,7 +10,7 @@ export function Concrete() {
   if (!show) return null;
   return (
     <mesh geometry={geometry} renderOrder={2}>
-      <meshStandardMaterial color="#cfcfcf" transparent opacity={0.22} depthWrite={false} roughness={0.9} metalness={0.0} />
+      <meshStandardMaterial color="#8a9a9e" transparent opacity={0.18} depthWrite={false} roughness={0.95} metalness={0.05} envMapIntensity={0.3} />
     </mesh>
   );
 }

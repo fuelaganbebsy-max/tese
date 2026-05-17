@@ -115,6 +115,23 @@ function QuantitiesTable() {
     return s + (r.length / 1000) * r.qty * wPerM;
   }, 0);
 
+  const exportCsv = () => {
+    const header = '编号,等级,直径(mm),长度(m),数量,重量(kg),备注';
+    const body = rows.map((r) => {
+      const w = (r.length / 1000) * r.qty * 0.00617 * r.dia * r.dia;
+      return `${r.mark},${r.grade},${r.dia},${(r.length / 1000).toFixed(2)},${r.qty},${w.toFixed(1)},${r.note ?? ''}`;
+    });
+    const footer = `合计,,,,, ${totalSteel.toFixed(2)},`;
+    const csv = '\uFEFF' + [header, ...body, footer].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `rebar-bom-KL1-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="flex-1 rounded-xl bg-surface-container/80 backdrop-blur-[20px] border border-white/5 flex flex-col overflow-hidden">
       <div className="px-4 py-2 border-b border-white/5 bg-surface-container-highest/30 flex justify-between items-center shrink-0">
@@ -122,7 +139,7 @@ function QuantitiesTable() {
           <span className="material-symbols-outlined text-[16px] text-primary-fixed-dim">table_chart</span>
           钢筋工程量 <span className="text-on-surface-variant text-[11px] font-normal ml-1">(BOM Data)</span>
         </h3>
-        <button className="text-primary-fixed-dim text-[11px] hover:underline font-label-numeric text-label-numeric font-mono">
+        <button onClick={exportCsv} className="text-primary-fixed-dim text-[11px] hover:underline font-label-numeric text-label-numeric font-mono active:scale-95 transition-transform">
           导出 CSV
         </button>
       </div>

@@ -1,24 +1,22 @@
 import { useBeamStore } from '../store/beamStore';
+import { useMemberStore } from '../store/memberStore';
+import { MEMBER_TYPES, MEMBER_LABELS, MEMBER_ICONS, MEMBER_STATUS, type MemberType } from '../config';
 
-interface NavItem {
-  icon: string;
-  label: string;
-  active?: boolean;
-  filled?: boolean;
-}
+const STATUS_DOT: Record<string, string> = {
+  ready: 'bg-green-400',
+  dev: 'bg-amber-400 animate-pulse',
+  planned: 'bg-white/20',
+};
 
 export function SideNav() {
   const collapsed = useBeamStore((s) => s.ui.sideNavCollapsed);
   const setUi = useBeamStore((s) => s.setUi);
+  const activeType = useMemberStore((s) => s.activeType);
+  const switchMember = useMemberStore((s) => s.switchMember);
 
-  const items: NavItem[] = [
-    { icon: 'architecture', label: '梁' },
-    { icon: 'layers', label: '板' },
-    { icon: 'view_column', label: '柱', active: true, filled: true },
-    { icon: 'view_quilt', label: '墙' },
-    { icon: 'stairs', label: '楼梯' },
-    { icon: 'foundation', label: '基础' },
-  ];
+  const handleSwitch = (type: MemberType) => {
+    switchMember(type);
+  };
 
   if (collapsed) {
     return (
@@ -30,24 +28,30 @@ export function SideNav() {
         >
           <span className="material-symbols-outlined text-[20px]">menu</span>
         </button>
-        {items.map((it) => (
-          <button
-            key={it.label}
-            title={it.label}
-            className={`p-2 rounded-lg transition-all ${
-              it.active
-                ? 'bg-primary-container/10 text-primary-fixed-dim'
-                : 'text-on-surface-variant opacity-70 hover:bg-white/5 hover:text-on-surface'
-            }`}
-          >
-            <span
-              className="material-symbols-outlined text-[20px]"
-              style={it.filled ? { fontVariationSettings: "'FILL' 1" } : undefined}
+        {MEMBER_TYPES.map((type) => {
+          const active = type === activeType;
+          const status = MEMBER_STATUS[type];
+          return (
+            <button
+              key={type}
+              title={`${MEMBER_LABELS[type]} (${type})${status === 'planned' ? ' — 开发中' : ''}`}
+              onClick={() => handleSwitch(type)}
+              className={`p-2 rounded-lg transition-all relative ${
+                active
+                  ? 'bg-primary-container/10 text-primary-fixed-dim'
+                  : 'text-on-surface-variant opacity-70 hover:bg-white/5 hover:text-on-surface'
+              }`}
             >
-              {it.icon}
-            </span>
-          </button>
-        ))}
+              <span
+                className="material-symbols-outlined text-[20px]"
+                style={active ? { fontVariationSettings: "'FILL' 1" } : undefined}
+              >
+                {MEMBER_ICONS[type]}
+              </span>
+              <span className={`absolute top-1 right-1 w-1.5 h-1.5 rounded-full ${STATUS_DOT[status]}`} />
+            </button>
+          );
+        })}
         <div className="mt-auto flex flex-col gap-1">
           <button title="设置" className="p-2 rounded-lg text-on-surface-variant opacity-70 hover:bg-white/5 hover:text-on-surface transition-all">
             <span className="material-symbols-outlined text-[20px]">settings</span>
@@ -74,64 +78,49 @@ export function SideNav() {
         </div>
         <div>
           <h2 className="font-display-lg text-primary-fixed-dim text-[16px] leading-tight font-bold">
-            铁锻工程 (IronForge)
+            Alpha-7 钢筋工程
           </h2>
-          <p className="font-body-sm text-body-sm text-on-surface-variant opacity-70">V3.4 Engine</p>
+          <p className="font-body-sm text-body-sm text-on-surface-variant opacity-70">22G101 全构件平台</p>
         </div>
       </div>
 
-      {/* CTA */}
-      <div className="px-gutter mb-4">
-        <button className="w-full flex items-center justify-center gap-2 py-2 rounded-DEFAULT bg-surface-container-highest border border-white/10 text-on-surface hover:border-primary-fixed-dim/50 hover:bg-white/5 transition-all active:scale-95 duration-150 group">
-          <span className="material-symbols-outlined text-primary-fixed-dim group-hover:rotate-90 transition-transform duration-300 text-[18px]">
-            add
-          </span>
-          <span className="font-body-sm text-body-sm font-medium">新建模块</span>
-        </button>
-      </div>
-
-      {/* Tabs */}
+      {/* Member Type Tabs */}
       <div className="flex-1 flex flex-col gap-1 px-2 overflow-y-auto">
-        {items.map((it) => (
-          <a
-            key={it.label}
-            href="#"
-            className={
-              it.active
-                ? 'flex items-center gap-4 bg-primary-container/10 text-primary-fixed-dim border-r-4 border-primary-fixed-dim px-4 py-3 rounded-lg font-bold bg-white/5'
-                : 'flex items-center gap-4 text-on-surface-variant px-4 py-3 opacity-70 hover:bg-white/5 hover:text-on-surface transition-all rounded-lg active:translate-x-1 duration-150'
-            }
-            onClick={(e) => e.preventDefault()}
-          >
-            <span
-              className="material-symbols-outlined"
-              style={it.filled ? { fontVariationSettings: "'FILL' 1" } : undefined}
+        {MEMBER_TYPES.map((type) => {
+          const active = type === activeType;
+          const status = MEMBER_STATUS[type];
+          return (
+            <button
+              key={type}
+              onClick={() => handleSwitch(type)}
+              className={
+                active
+                  ? 'flex items-center gap-4 bg-primary-container/10 text-primary-fixed-dim border-r-4 border-primary-fixed-dim px-4 py-3 rounded-lg font-bold bg-white/5 text-left'
+                  : 'flex items-center gap-4 text-on-surface-variant px-4 py-3 opacity-70 hover:bg-white/5 hover:text-on-surface transition-all rounded-lg active:translate-x-1 duration-150 text-left'
+              }
             >
-              {it.icon}
-            </span>
-            <span className="font-label-numeric text-label-numeric font-mono">{it.label}</span>
-          </a>
-        ))}
+              <span
+                className="material-symbols-outlined"
+                style={active ? { fontVariationSettings: "'FILL' 1" } : undefined}
+              >
+                {MEMBER_ICONS[type]}
+              </span>
+              <span className="font-label-numeric text-label-numeric font-mono flex-1">{MEMBER_LABELS[type]}</span>
+              <span className="font-mono text-[10px] text-on-surface-variant/60">{type}</span>
+              <span className={`w-2 h-2 rounded-full shrink-0 ${STATUS_DOT[status]}`} title={status === 'ready' ? '可用' : status === 'dev' ? '开发中' : '规划中'} />
+            </button>
+          );
+        })}
       </div>
 
-      {/* Footer Tabs */}
+      {/* Footer */}
       <div className="px-2 mt-auto border-t border-white/5 pt-2">
-        <a
-          href="#"
-          className="flex items-center gap-4 text-on-surface-variant px-4 py-3 opacity-70 hover:bg-white/5 hover:text-on-surface transition-all rounded-lg active:translate-x-1 duration-150"
-          onClick={(e) => e.preventDefault()}
+        <button
+          className="flex items-center gap-4 text-on-surface-variant px-4 py-3 opacity-70 hover:bg-white/5 hover:text-on-surface transition-all rounded-lg w-full"
         >
           <span className="material-symbols-outlined">settings</span>
           <span className="font-label-numeric text-label-numeric font-mono">设置</span>
-        </a>
-        <a
-          href="#"
-          className="flex items-center gap-4 text-on-surface-variant px-4 py-3 opacity-70 hover:bg-white/5 hover:text-on-surface transition-all rounded-lg active:translate-x-1 duration-150"
-          onClick={(e) => e.preventDefault()}
-        >
-          <span className="material-symbols-outlined">contact_support</span>
-          <span className="font-label-numeric text-label-numeric font-mono">支持</span>
-        </a>
+        </button>
         <button
           onClick={() => setUi({ sideNavCollapsed: true })}
           title="收起"

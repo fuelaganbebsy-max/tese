@@ -5,10 +5,10 @@ import { derive } from '../domain/kl/derive';
 import { buildBottom, buildTopSupport, buildTopThrough } from '../geometry/buildLongitudinal';
 import { buildStirrupUnitGeometry } from '../geometry/buildStirrup';
 
-const REBAR_TOP_COLOR = '#c0392b';
-const REBAR_BOT_COLOR = '#e67e22';
-const REBAR_SUP_COLOR = '#8e44ad';
-const STIRRUP_COLOR = '#2c3e50';
+const REBAR_TOP_COLOR = '#ef5350';
+const REBAR_BOT_COLOR = '#ffa726';
+const REBAR_SUP_COLOR = '#ab47bc';
+const STIRRUP_COLOR = '#78909c';
 
 export function Rebars() {
   const params = useBeamStore((s) => s.params);
@@ -49,22 +49,22 @@ export function Rebars() {
     <group>
       {top.map((r, i) => (
         <mesh key={`t-${i}`} geometry={r.geometry} renderOrder={1}>
-          <meshStandardMaterial color={REBAR_TOP_COLOR} metalness={0.5} roughness={0.55} />
+          <meshStandardMaterial color={REBAR_TOP_COLOR} metalness={0.7} roughness={0.35} envMapIntensity={1.2} />
         </mesh>
       ))}
       {bot.map((r, i) => (
         <mesh key={`b-${i}`} geometry={r.geometry} renderOrder={1}>
-          <meshStandardMaterial color={REBAR_BOT_COLOR} metalness={0.5} roughness={0.55} />
+          <meshStandardMaterial color={REBAR_BOT_COLOR} metalness={0.7} roughness={0.35} envMapIntensity={1.2} />
         </mesh>
       ))}
       {sup.map((r, i) => (
         <mesh key={`s-${i}`} geometry={r.geometry} renderOrder={1}>
-          <meshStandardMaterial color={REBAR_SUP_COLOR} metalness={0.5} roughness={0.55} />
+          <meshStandardMaterial color={REBAR_SUP_COLOR} metalness={0.7} roughness={0.35} envMapIntensity={1.2} />
         </mesh>
       ))}
       {stirrupGeom && stirrupXs.length > 0 && (
         <instancedMesh ref={instRef} args={[stirrupGeom, undefined, stirrupXs.length]} renderOrder={1}>
-          <meshStandardMaterial color={STIRRUP_COLOR} metalness={0.4} roughness={0.6} />
+          <meshStandardMaterial color={STIRRUP_COLOR} metalness={0.65} roughness={0.4} envMapIntensity={1.0} />
         </instancedMesh>
       )}
     </group>
