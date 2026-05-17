@@ -12,50 +12,46 @@ export function ViewportHud() {
 
   return (
     <>
-      {/* Top overlays */}
-      <div className="absolute top-3 left-3 right-3 flex justify-between items-start pointer-events-none z-20 gap-3">
-        <div className="glass-panel rounded-md px-3 py-2 pointer-events-auto flex gap-4 min-w-0 overflow-hidden">
-          <div className="flex flex-col min-w-0">
-            <span className="text-[10px] tracking-widest text-white/40 mb-0.5">当前梁</span>
-            <span className="font-mono text-[11px] text-primary truncate">
-              KL-1({params.spans.length}) {params.b}×{params.h}
-            </span>
-          </div>
-          <div className="hidden md:flex w-px bg-white/10" />
-          <div className="hidden md:flex flex-col">
-            <span className="text-[10px] tracking-widest text-white/40 mb-0.5">混凝土</span>
-            <span className="font-mono text-[11px] text-white/80">
-              {params.concrete} · {['一', '二', '三', '四'][params.seismic - 1]}级
-            </span>
-          </div>
-          <div className="hidden lg:flex w-px bg-white/10" />
-          <div className="hidden lg:flex flex-col">
-            <span className="text-[10px] tracking-widest text-white/40 mb-0.5">梁全长</span>
-            <span className="font-mono text-[11px] text-white/80">
-              {(d.totalLength / 1000).toFixed(3)} m
-            </span>
-          </div>
+      {/* Viewport HUD Header */}
+      <div className="absolute top-0 left-0 w-full p-4 flex justify-between items-start z-10 pointer-events-none">
+        {/* Left: Status badge */}
+        <div className="pointer-events-auto flex items-center gap-2 bg-surface-container-highest/80 backdrop-blur-md px-3 py-1.5 rounded-DEFAULT border border-white/10">
+          <span className="w-2 h-2 rounded-full bg-primary-fixed-dim animate-pulse" />
+          <span className="font-label-numeric text-label-numeric text-on-surface text-[11px] font-mono">
+            KL-1({params.spans.length}) {params.b}×{params.h} 渲染中
+          </span>
         </div>
 
-        {/* View toggles */}
-        <div className="glass-panel rounded-md flex pointer-events-auto overflow-hidden">
+        {/* Right: View buttons */}
+        <div className="pointer-events-auto flex flex-col gap-2">
+          <button
+            className="w-8 h-8 rounded-DEFAULT bg-surface-container-highest/80 backdrop-blur-md border border-white/10 flex items-center justify-center text-on-surface hover:text-primary-fixed-dim transition-colors"
+            title="Top View"
+          >
+            <span className="font-label-numeric text-label-numeric text-[10px] font-bold font-mono">TOP</span>
+          </button>
+          <button
+            className="w-8 h-8 rounded-DEFAULT bg-surface-container-highest/80 backdrop-blur-md border border-white/10 flex items-center justify-center text-on-surface hover:text-primary-fixed-dim transition-colors"
+            title="Reset Camera"
+          >
+            <span className="material-symbols-outlined text-[16px]">videocam</span>
+          </button>
+          {/* View toggles */}
           {([
             ['showConcrete', 'deployed_code', '混凝土'],
             ['showColumns', 'view_column', '柱'],
             ['showLongitudinal', 'horizontal_rule', '纵筋'],
             ['showStirrups', 'grid_4x4', '箍筋'],
-          ] as const).map(([k, icon, label], i, arr) => (
+          ] as const).map(([k, icon, label]) => (
             <button
               key={k}
               title={label}
               onClick={() => setView({ [k]: !view[k] } as any)}
-              className={[
-                'w-9 h-9 flex items-center justify-center transition-colors',
-                i < arr.length - 1 ? 'border-r border-white/5' : '',
+              className={`w-8 h-8 rounded-DEFAULT backdrop-blur-md border border-white/10 flex items-center justify-center transition-colors ${
                 view[k]
-                  ? 'text-primary bg-primary/10'
-                  : 'text-white/40 hover:text-primary hover:bg-white/5',
-              ].join(' ')}
+                  ? 'bg-primary-fixed-dim/20 text-primary-fixed-dim'
+                  : 'bg-surface-container-highest/80 text-on-surface-variant hover:text-primary-fixed-dim'
+              }`}
             >
               <span className="material-symbols-outlined text-[16px]">{icon}</span>
             </button>
@@ -63,28 +59,21 @@ export function ViewportHud() {
         </div>
       </div>
 
-      {/* Bottom status bar */}
-      <div className="absolute bottom-3 left-3 right-3 z-20 flex items-end justify-between gap-3 pointer-events-none">
-        <div className="glass-panel rounded-md px-3 py-1.5 pointer-events-auto flex items-center gap-3 font-mono text-[10px]">
-          <span className="material-symbols-outlined text-white/30 text-[12px]">360</span>
-          <span className="text-white/60">b{params.b}</span>
-          <span className="text-white/60">h{params.h}</span>
-          <span className="text-primary">c{params.cover}</span>
+      {/* Viewport Bottom HUD */}
+      <div className="absolute bottom-4 left-4 right-4 pointer-events-none flex justify-between items-end z-10">
+        <div className="pointer-events-auto flex gap-2">
+          <span className="px-2 py-1 rounded bg-surface-container-highest/90 border border-white/5 font-label-numeric text-label-numeric text-primary-fixed-dim text-[10px] font-mono">
+            LOD: High
+          </span>
+          <span className="px-2 py-1 rounded bg-surface-container-highest/90 border border-white/5 font-label-numeric text-label-numeric text-on-surface-variant text-[10px] font-mono">
+            箍筋: {stirrupCount}
+          </span>
+          <span className="hidden md:inline-block px-2 py-1 rounded bg-surface-container-highest/90 border border-white/5 font-label-numeric text-label-numeric text-on-surface-variant text-[10px] font-mono">
+            laE: {d.topAnchor.laE.toFixed(0)}
+          </span>
         </div>
 
-        <div className="hidden md:flex glass-panel rounded-md px-3 py-1.5 pointer-events-auto items-center gap-3 font-mono text-[10px]">
-          <span className="w-1.5 h-1.5 rounded-full bg-teal animate-pulse" />
-          <span className="tracking-widest text-white/40">锚固 laE</span>
-          <span className="text-primary">{d.topAnchor.laE.toFixed(0)}</span>
-          <span className="text-white/10">|</span>
-          <span className="tracking-widest text-white/40">加密区</span>
-          <span className="text-primary">{d.densifiedZoneLen.toFixed(0)}</span>
-          <span className="text-white/10">|</span>
-          <span className="tracking-widest text-white/40">箍筋数</span>
-          <span className="text-primary">{stirrupCount}</span>
-        </div>
-
-        <div className="hidden xl:block text-[10px] text-white/30 text-right leading-relaxed">
+        <div className="hidden xl:block text-[10px] text-on-surface-variant/50 text-right leading-relaxed pointer-events-auto">
           左键旋转 · 右键平移 · 滚轮缩放
         </div>
       </div>

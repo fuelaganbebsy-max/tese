@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useBeamStore } from '../store/beamStore';
 import type { BeamParams, ConcreteGrade, RebarGrade, SeismicLevel, Span } from '../domain/kl/types';
 
@@ -7,24 +8,6 @@ const CONCRETES: ConcreteGrade[] = ['C25', 'C30', 'C35', 'C40', 'C45', 'C50'];
 const SEISMICS: SeismicLevel[] = [1, 2, 3, 4];
 
 /* ---------- Atoms ---------- */
-
-function SectionHeader({ icon, label }: { icon: string; label: string }) {
-  return (
-    <div className="text-[11px] tracking-[0.12em] text-primary flex items-center gap-2 border-b border-white/5 pb-2 font-medium">
-      <span className="material-symbols-outlined text-[14px]">{icon}</span>
-      {label}
-    </div>
-  );
-}
-
-function FieldLabel({ children, hint }: { children: React.ReactNode; hint?: string }) {
-  return (
-    <div className="flex items-center justify-between">
-      <label className="text-[11px] tracking-wider text-white/60">{children}</label>
-      {hint && <span className="font-mono text-[10px] text-primary">{hint}</span>}
-    </div>
-  );
-}
 
 function NumField({
   label,
@@ -42,33 +25,19 @@ function NumField({
   unit?: string;
 }) {
   return (
-    <div className="space-y-1.5">
-      <FieldLabel>{label}</FieldLabel>
-      <div className="relative flex items-center surface-0 border divider-strong rounded focus-within:border-primary focus-within:ring-1 focus-within:ring-primary/40 transition-colors h-8">
-        <button
-          type="button"
-          onClick={() => onChange(Math.max(min, value - step))}
-          className="px-2 h-full text-white/40 hover:text-primary border-r divider"
-        >
-          <span className="material-symbols-outlined text-[14px]">remove</span>
-        </button>
+    <div className="flex flex-col gap-1">
+      <label className="font-body-sm text-[11px] text-on-surface-variant">{label}</label>
+      <div className="relative">
         <input
           type="number"
-          className="flex-1 min-w-0 bg-transparent px-2 font-mono text-[11px] text-white/90 text-center"
+          className="w-full bg-surface-container-lowest border border-white/10 rounded px-3 py-1.5 font-label-numeric text-label-numeric text-on-surface focus:border-primary-fixed-dim focus:ring-1 focus:ring-primary-fixed-dim outline-none text-right pr-10 font-mono"
           value={value}
           step={step}
           min={min}
           onChange={(e) => onChange(Number(e.target.value))}
         />
-        <button
-          type="button"
-          onClick={() => onChange(value + step)}
-          className="px-2 h-full text-white/40 hover:text-primary border-l divider"
-        >
-          <span className="material-symbols-outlined text-[14px]">add</span>
-        </button>
         {unit && (
-          <span className="absolute right-9 top-1/2 -translate-y-1/2 text-[9px] text-white/30 font-mono pointer-events-none">
+          <span className="absolute right-3 top-1/2 -translate-y-1/2 font-label-numeric text-[11px] text-on-surface-variant pointer-events-none font-mono">
             {unit}
           </span>
         )}
@@ -91,10 +60,10 @@ function SelectField<T extends string | number>({
   fmt?: (v: T) => string;
 }) {
   return (
-    <div className="space-y-1.5">
-      <FieldLabel>{label}</FieldLabel>
+    <div className="flex flex-col gap-1">
+      <label className="font-body-sm text-[11px] text-on-surface-variant">{label}</label>
       <select
-        className="w-full surface-0 border divider-strong rounded focus:border-primary focus:ring-1 focus:ring-primary/40 h-8 px-2 font-mono text-[11px] text-white/90 transition-colors"
+        className="bg-surface-container-lowest border border-white/10 rounded px-2 py-1.5 font-label-numeric text-label-numeric text-on-surface focus:border-primary-fixed-dim focus:ring-1 focus:ring-primary-fixed-dim outline-none appearance-none font-mono"
         value={String(value)}
         onChange={(e) => {
           const raw = e.target.value;
@@ -103,7 +72,7 @@ function SelectField<T extends string | number>({
         }}
       >
         {options.map((o) => (
-          <option key={String(o)} value={String(o)} className="bg-[#121212]">
+          <option key={String(o)} value={String(o)}>
             {fmt ? fmt(o) : String(o)}
           </option>
         ))}
@@ -122,36 +91,37 @@ function BundleEditor({
   onChange: (b: { grade: RebarGrade; diameter: number; count: number }) => void;
 }) {
   return (
-    <div className="space-y-1.5">
-      <FieldLabel hint={`${value.count}⌀${value.diameter} ${value.grade}`}>{label}</FieldLabel>
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-center justify-between">
+        <label className="font-body-sm text-[11px] text-on-surface-variant">{label}</label>
+        <span className="font-label-numeric text-[10px] text-primary-fixed-dim font-mono">
+          {value.count}⌀{value.diameter} {value.grade}
+        </span>
+      </div>
       <div className="grid grid-cols-3 gap-1.5">
         <select
-          className="surface-0 border divider-strong rounded focus:border-primary h-7 px-1.5 font-mono text-[10px] text-white/90"
+          className="bg-surface-container-lowest border border-white/10 rounded focus:border-primary-fixed-dim h-7 px-1.5 font-mono text-[10px] text-on-surface appearance-none"
           value={value.grade}
           onChange={(e) => onChange({ ...value, grade: e.target.value as RebarGrade })}
         >
           {GRADES.map((g) => (
-            <option key={g} value={g} className="bg-[#121212]">
-              {g}
-            </option>
+            <option key={g} value={g}>{g}</option>
           ))}
         </select>
         <select
-          className="surface-0 border divider-strong rounded focus:border-primary h-7 px-1.5 font-mono text-[10px] text-white/90"
+          className="bg-surface-container-lowest border border-white/10 rounded focus:border-primary-fixed-dim h-7 px-1.5 font-mono text-[10px] text-on-surface appearance-none"
           value={value.diameter}
           onChange={(e) => onChange({ ...value, diameter: Number(e.target.value) })}
         >
           {COMMON_DIA.map((d) => (
-            <option key={d} value={d} className="bg-[#121212]">
-              ⌀{d}
-            </option>
+            <option key={d} value={d}>⌀{d}</option>
           ))}
         </select>
         <input
           type="number"
           min={1}
           max={20}
-          className="surface-0 border divider-strong rounded focus:border-primary h-7 px-2 font-mono text-[10px] text-white/90 text-center"
+          className="bg-surface-container-lowest border border-white/10 rounded focus:border-primary-fixed-dim h-7 px-2 font-mono text-[10px] text-on-surface text-center"
           value={value.count}
           onChange={(e) => onChange({ ...value, count: Math.max(1, Number(e.target.value)) })}
         />
@@ -174,12 +144,10 @@ function SpanEditor({
   onChange: (s: Span) => void;
 }) {
   return (
-    <div className="rounded-md border divider-strong surface-2 overflow-hidden">
-      <div className="px-3 py-2 surface-3 border-b divider flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className="font-mono text-[10px] text-primary">第 {idx + 1} / {total} 跨</span>
-        </div>
-        <span className="font-mono text-[10px] text-white/50">ln = {span.ln}mm</span>
+    <div className="rounded-lg border border-white/5 bg-surface-container-highest/30 overflow-hidden">
+      <div className="px-3 py-2 bg-surface-container-highest/50 border-b border-white/5 flex items-center justify-between">
+        <span className="font-label-numeric text-[10px] text-primary-fixed-dim font-mono">第 {idx + 1} / {total} 跨</span>
+        <span className="font-label-numeric text-[10px] text-on-surface-variant font-mono">ln = {span.ln}mm</span>
       </div>
       <div className="p-3 space-y-3">
         <div className="grid grid-cols-3 gap-2">
@@ -198,8 +166,8 @@ function SpanEditor({
           value={span.topRightSupport ?? { grade: 'HRB400', diameter: 25, count: 2 }}
           onChange={(b) => onChange({ ...span, topRightSupport: b })}
         />
-        <div className="pt-2 border-t divider space-y-2">
-          <div className="text-[10px] tracking-widest text-white/50 flex items-center gap-1">
+        <div className="pt-2 border-t border-white/5 space-y-2">
+          <div className="text-[10px] tracking-widest text-on-surface-variant flex items-center gap-1">
             <span className="material-symbols-outlined text-[12px]">grid_4x4</span>
             箍筋
           </div>
@@ -235,85 +203,121 @@ function SpanEditor({
   );
 }
 
-/* ---------- Inspector root ---------- */
+/* ---------- AI Copilot Panel ---------- */
 
-export function ParamPanel() {
-  const params = useBeamStore((s) => s.params);
-  const setParams = useBeamStore((s) => s.setParams);
-  const reset = useBeamStore((s) => s.reset);
-  const collapsed = useBeamStore((s) => s.ui.inspectorCollapsed);
-  const setUi = useBeamStore((s) => s.setUi);
-
-  const update = (patch: Partial<BeamParams>) => setParams((p) => ({ ...p, ...patch }));
-
-  if (collapsed) {
-    return (
-      <aside className="surface-1 border-l divider-strong flex flex-col h-full shrink-0 z-30 w-10 relative items-center py-3 gap-2">
-        <button
-          onClick={() => setUi({ inspectorCollapsed: false })}
-          title="展开参数面板"
-          className="w-8 h-8 flex items-center justify-center rounded text-white/60 hover:text-primary hover:bg-white/5 transition-colors"
-        >
-          <span className="material-symbols-outlined text-[18px]">chevron_left</span>
-        </button>
-        <div className="w-8 h-8 flex items-center justify-center text-primary">
-          <span className="material-symbols-outlined text-[18px]">tune</span>
-        </div>
-        <div className="flex-1" />
-        <div className="rotate-180 [writing-mode:vertical-rl] text-[11px] tracking-widest text-white/40">
-          参数
-        </div>
-      </aside>
-    );
-  }
-
+function AiCopilot() {
   return (
-    <aside className="surface-1 border-l divider-strong flex flex-col h-full shrink-0 z-30 w-[300px] relative">
-      {/* Header */}
-      <div className="h-12 border-b divider flex items-center justify-between px-4 surface-2 shrink-0">
-        <span className="text-[12px] tracking-wider text-white/90 flex items-center gap-2">
-          <span className="material-symbols-outlined text-[16px]">tune</span>
-          参数面板
-        </span>
-        <div className="flex items-center gap-1">
-          <button
-            onClick={reset}
-            title="恢复默认"
-            className="text-white/40 hover:text-primary transition-colors flex items-center gap-1 text-[11px] tracking-wider px-2 h-7 rounded hover:bg-white/5"
-          >
-            <span className="material-symbols-outlined text-[14px]">restart_alt</span>
-            重置
+    <div className="flex-1 flex flex-col min-h-0">
+      {/* Glassy header */}
+      <div className="px-4 py-2 border-b border-white/5 flex items-center gap-2 sticky top-0 bg-surface-container-high/90 backdrop-blur-md z-10">
+        <span className="material-symbols-outlined text-primary-container text-[18px]">smart_toy</span>
+        <span className="font-body-sm text-body-sm font-medium text-on-surface">AI 结构助手</span>
+      </div>
+      {/* Chat Area */}
+      <div className="flex-1 p-4 overflow-y-auto flex flex-col gap-4">
+        {/* AI Message */}
+        <div className="flex gap-3">
+          <div className="w-6 h-6 rounded-full bg-primary-container/20 flex items-center justify-center shrink-0 border border-primary-container/30">
+            <span className="material-symbols-outlined text-primary-container text-[14px]">auto_awesome</span>
+          </div>
+          <div className="flex-1 bg-surface-container-highest/50 rounded-r-lg rounded-bl-lg p-3 border border-white/5 text-body-sm font-body-sm text-on-surface-variant leading-relaxed">
+            已分析当前梁配筋方案。根据GB50010-2010规范，体积配箍率偏高，存在优化空间。
+            <br /><br />
+            建议将加密区箍筋间距从 @100 调整为 @150。
+          </div>
+        </div>
+        {/* Quick Actions */}
+        <div className="flex flex-wrap gap-2 mt-auto pt-2">
+          <button className="px-3 py-1.5 rounded-full border border-primary-fixed-dim/40 bg-primary-fixed-dim/5 text-primary-fixed-dim font-body-sm text-[11px] hover:bg-primary-fixed-dim/10 transition-colors flex items-center gap-1">
+            <span className="material-symbols-outlined text-[14px]">trending_up</span> 建议优化
           </button>
-          <button
-            onClick={() => setUi({ inspectorCollapsed: true })}
-            title="收起"
-            className="w-7 h-7 flex items-center justify-center text-white/40 hover:text-primary hover:bg-white/5 rounded transition-colors"
-          >
-            <span className="material-symbols-outlined text-[16px]">chevron_right</span>
+          <button className="px-3 py-1.5 rounded-full border border-white/10 bg-surface-container-lowest text-on-surface font-body-sm text-[11px] hover:bg-white/5 transition-colors flex items-center gap-1">
+            <span className="material-symbols-outlined text-[14px]">rule</span> 查看规范
           </button>
         </div>
       </div>
+      {/* Input */}
+      <div className="p-3 border-t border-white/5 bg-surface-container-highest/20 shrink-0">
+        <div className="relative">
+          <input
+            className="w-full bg-surface-container-lowest border border-white/10 rounded-full py-2 pl-4 pr-10 text-body-sm font-body-sm text-on-surface focus:outline-none focus:border-primary-fixed-dim focus:ring-1 focus:ring-primary-fixed-dim transition-colors placeholder:text-on-surface-variant/40"
+            placeholder="输入优化指令..."
+            type="text"
+          />
+          <button className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-primary-container/10 flex items-center justify-center text-primary-container hover:bg-primary-container/20 transition-colors">
+            <span className="material-symbols-outlined text-[16px]">send</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
-      {/* Scrollable */}
-      <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-5 surface-1">
-        {/* Dimensions */}
-        <div className="space-y-3">
-          <SectionHeader icon="straighten" label="截面尺寸" />
-          <div className="grid grid-cols-2 gap-3">
-            <NumField label="梁宽 b" value={params.b} onChange={(v) => update({ b: v })} step={50} unit="mm" />
-            <NumField label="梁高 h" value={params.h} onChange={(v) => update({ h: v })} step={50} unit="mm" />
+/* ---------- Parameters Tab Content ---------- */
+
+function ParamContent() {
+  const params = useBeamStore((s) => s.params);
+  const setParams = useBeamStore((s) => s.setParams);
+  const update = (patch: Partial<BeamParams>) => setParams((p) => ({ ...p, ...patch }));
+
+  return (
+    <div className="flex-1 overflow-y-auto flex flex-col divide-y divide-white/10">
+      {/* Parameter Adjustment Panel */}
+      <div className="p-5 flex flex-col gap-5">
+        <div className="flex justify-between items-center">
+          <h3 className="font-body-md text-body-md font-semibold text-on-surface tracking-wide font-bold">
+            截面参数 <span className="text-on-surface-variant font-normal text-[11px]">(Section Props)</span>
+          </h3>
+          <span className="px-2 py-0.5 rounded bg-surface-container-lowest border border-white/5 font-label-numeric text-[10px] text-primary-fixed-dim font-mono">
+            ID: KL-1
+          </span>
+        </div>
+
+        {/* Slider fields */}
+        <div className="space-y-4">
+          <div className="flex flex-col gap-1.5">
+            <label className="font-body-sm text-body-sm text-on-surface-variant flex justify-between">
+              <span>宽度 (Width) <i>b</i></span>
+              <span className="font-label-numeric text-primary-fixed-dim font-mono">{params.b} mm</span>
+            </label>
+            <input
+              type="range" min={150} max={800} value={params.b} step={50}
+              onChange={(e) => update({ b: Number(e.target.value) })}
+              className="w-full"
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <label className="font-body-sm text-body-sm text-on-surface-variant flex justify-between">
+              <span>高度 (Height) <i>h</i></span>
+              <span className="font-label-numeric text-primary-fixed-dim font-mono">{params.h} mm</span>
+            </label>
+            <input
+              type="range" min={200} max={1200} value={params.h} step={50}
+              onChange={(e) => update({ h: Number(e.target.value) })}
+              className="w-full"
+            />
           </div>
         </div>
 
-        {/* Material */}
+        <div className="divider-gradient" />
+
+        {/* Properties Form */}
         <div className="space-y-3">
-          <SectionHeader icon="category" label="材料与护层" />
-          <SelectField
-            label="混凝土等级"
-            value={params.concrete}
-            options={CONCRETES}
-            onChange={(v) => update({ concrete: v })}
-          />
+          <h4 className="font-body-sm text-body-sm font-medium text-on-surface font-bold">材质</h4>
+          <div className="grid grid-cols-2 gap-3">
+            <SelectField
+              label="混凝土 (Concrete)"
+              value={params.concrete}
+              options={CONCRETES}
+              onChange={(v) => update({ concrete: v })}
+            />
+            <SelectField
+              label="主筋 (Main Rebar)"
+              value={params.topThrough.grade}
+              options={GRADES}
+              onChange={(v) => update({ topThrough: { ...params.topThrough, grade: v } })}
+            />
+          </div>
           <SelectField
             label="抗震等级"
             value={params.seismic}
@@ -321,37 +325,36 @@ export function ParamPanel() {
             onChange={(v) => update({ seismic: v })}
             fmt={(v) => `抗震${['一', '二', '三', '四'][(v as number) - 1]}级（等级 ${['Ⅰ', 'Ⅱ', 'Ⅲ', 'Ⅳ'][(v as number) - 1]}）`}
           />
-          <div className="space-y-2 pt-1">
-            <FieldLabel hint={`${params.cover}mm`}>保护层 c</FieldLabel>
-            <input
-              type="range"
-              min={15}
-              max={50}
-              value={params.cover}
-              onChange={(e) => update({ cover: Number(e.target.value) })}
-              className="w-full accent-primary h-0.5 bg-white/10 rounded-lg appearance-none cursor-pointer"
-            />
-            <div className="flex justify-between font-mono text-[9px] text-white/30">
-              <span>15</span>
-              <span>25</span>
-              <span>50</span>
+          <div className="flex flex-col gap-1 pt-2">
+            <label className="font-body-sm text-[11px] text-on-surface-variant">保护层厚度 (Cover Layer)</label>
+            <div className="relative">
+              <input
+                type="number"
+                className="w-full bg-surface-container-lowest border border-white/10 rounded px-3 py-1.5 font-label-numeric text-label-numeric text-on-surface focus:border-primary-fixed-dim focus:ring-1 focus:ring-primary-fixed-dim outline-none text-right pr-10 font-mono"
+                value={params.cover}
+                onChange={(e) => update({ cover: Number(e.target.value) })}
+              />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 font-label-numeric text-[11px] text-on-surface-variant pointer-events-none font-mono">mm</span>
             </div>
           </div>
         </div>
 
+        <div className="divider-gradient" />
+
         {/* Top through */}
         <div className="space-y-3">
-          <SectionHeader icon="horizontal_rule" label="上部贯通筋" />
+          <h4 className="font-body-sm text-body-sm font-medium text-on-surface font-bold">上部贯通筋</h4>
           <BundleEditor label="上部贯通" value={params.topThrough} onChange={(b) => update({ topThrough: b })} />
         </div>
 
+        <div className="divider-gradient" />
+
         {/* Spans */}
         <div className="space-y-3">
-          <div className="flex items-center justify-between border-b border-white/5 pb-2">
-            <div className="text-[11px] tracking-[0.12em] text-primary flex items-center gap-2 font-medium">
-              <span className="material-symbols-outlined text-[14px]">view_week</span>
+          <div className="flex items-center justify-between">
+            <h4 className="font-body-sm text-body-sm font-medium text-on-surface font-bold">
               跨列表 · 共 {params.spans.length} 跨
-            </div>
+            </h4>
             <div className="flex gap-1">
               <button
                 onClick={() =>
@@ -360,7 +363,7 @@ export function ParamPanel() {
                     spans: [...p.spans, { ...p.spans[p.spans.length - 1] }],
                   }))
                 }
-                className="w-7 h-7 flex items-center justify-center rounded border border-primary/30 text-primary hover:bg-primary/10 transition-colors"
+                className="w-7 h-7 flex items-center justify-center rounded border border-primary-fixed-dim/30 text-primary-fixed-dim hover:bg-primary-fixed-dim/10 transition-colors"
                 title="增加一跨"
               >
                 <span className="material-symbols-outlined text-[14px]">add</span>
@@ -368,7 +371,7 @@ export function ParamPanel() {
               <button
                 disabled={params.spans.length <= 1}
                 onClick={() => setParams((p) => ({ ...p, spans: p.spans.slice(0, -1) }))}
-                className="w-7 h-7 flex items-center justify-center rounded border border-white/10 text-white/60 hover:bg-white/5 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                className="w-7 h-7 flex items-center justify-center rounded border border-white/10 text-on-surface-variant hover:bg-white/5 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                 title="删除末跨"
               >
                 <span className="material-symbols-outlined text-[14px]">remove</span>
@@ -387,16 +390,81 @@ export function ParamPanel() {
             ))}
           </div>
         </div>
+
+        {/* Apply button */}
+        <button className="mt-2 w-full py-2 bg-surface-container border border-primary-fixed-dim/30 text-primary-fixed-dim font-body-sm text-body-sm rounded hover:bg-primary-fixed-dim hover:text-on-primary transition-colors duration-200">
+          应用更新
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- Inspector root ---------- */
+
+export function ParamPanel() {
+  const [activeTab, setActiveTab] = useState<'params' | 'ai'>('params');
+  const collapsed = useBeamStore((s) => s.ui.inspectorCollapsed);
+  const setUi = useBeamStore((s) => s.setUi);
+
+  if (collapsed) {
+    return (
+      <aside className="bg-[#0d0d0d] border-l border-white/5 flex flex-col h-full shrink-0 z-30 w-10 items-center py-3 gap-2">
+        <button
+          onClick={() => setUi({ inspectorCollapsed: false })}
+          title="展开参数面板"
+          className="w-8 h-8 flex items-center justify-center rounded text-on-surface-variant hover:text-primary-fixed-dim hover:bg-white/5 transition-colors"
+        >
+          <span className="material-symbols-outlined text-[18px]">chevron_left</span>
+        </button>
+        <div className="w-8 h-8 flex items-center justify-center text-primary-fixed-dim">
+          <span className="material-symbols-outlined text-[18px]" style={{ fontVariationSettings: "'FILL' 1" }}>
+            settings_input_component
+          </span>
+        </div>
+        <div className="flex-1" />
+        <div className="rotate-180 [writing-mode:vertical-rl] text-[11px] tracking-widest text-on-surface-variant/50">
+          参数
+        </div>
+      </aside>
+    );
+  }
+
+  return (
+    <aside className="bg-[#0d0d0d] border-l border-white/5 flex flex-col h-full shrink-0 z-30" style={{ width: 280 }}>
+      {/* Inspector Nav Tabs */}
+      <div className="flex border-b border-white/10 shrink-0 bg-surface-container-highest/50">
+        <button
+          onClick={() => setActiveTab('params')}
+          className={`flex-1 flex flex-col items-center justify-center p-3 font-body-sm text-body-sm font-bold transition-all ${
+            activeTab === 'params'
+              ? 'bg-primary-container/10 text-primary-fixed-dim border-b-2 border-primary-fixed-dim'
+              : 'text-on-surface-variant hover:bg-white/5'
+          }`}
+        >
+          <span
+            className="material-symbols-outlined text-[18px] mb-1"
+            style={activeTab === 'params' ? { fontVariationSettings: "'FILL' 1" } : undefined}
+          >
+            settings_input_component
+          </span>
+          参数
+        </button>
+        <button
+          onClick={() => setActiveTab('ai')}
+          className={`flex-1 flex flex-col items-center justify-center p-3 font-body-sm text-body-sm transition-all ${
+            activeTab === 'ai'
+              ? 'bg-primary-container/10 text-primary-fixed-dim border-b-2 border-primary-fixed-dim font-bold'
+              : 'text-on-surface-variant hover:bg-white/5'
+          }`}
+        >
+          <span className="material-symbols-outlined text-[18px] mb-1">smart_toy</span>
+          AI 助手
+        </button>
       </div>
 
-      {/* Status footer */}
-      <div className="border-t divider surface-2 px-4 py-2 flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-2">
-          <span className="w-1.5 h-1.5 rounded-full bg-teal animate-pulse" />
-          <span className="text-[10px] tracking-widest text-white/50">实时同步</span>
-        </div>
-        <span className="font-mono text-[10px] text-white/40">单位 · mm</span>
-      </div>
+      {/* Content */}
+      {activeTab === 'params' ? <ParamContent /> : <AiCopilot />}
     </aside>
   );
 }

@@ -25,15 +25,18 @@ export default function App() {
   }, [setUi]);
 
   return (
-    <div className="h-screen w-screen overflow-hidden flex flex-col text-[13px] surface-0">
+    <div className="h-screen w-screen overflow-hidden flex flex-col font-body-md text-body-md bg-background text-on-background antialiased selection:bg-primary-container selection:text-on-primary-container">
       <TopBar />
-      <div className="flex flex-1 overflow-hidden h-[calc(100vh-56px)]">
+      <div className="flex flex-1 overflow-hidden relative w-full">
         <SideNav />
-        <main className="flex-1 flex flex-col min-w-0 z-10 surface-0">
-          <div className="flex-1 relative flex flex-col border-b divider min-h-0 viewport-bg">
+        {/* Middle Column: Canvas & Data */}
+        <main className="flex-1 flex flex-col p-gutter gap-gutter overflow-y-auto relative z-10 min-w-[400px] bg-[#121212]">
+          {/* 3D Canvas Area */}
+          <div className="flex-1 rounded-xl bg-surface-container/50 backdrop-blur-[20px] border border-white/5 relative overflow-hidden flex flex-col shadow-2xl min-h-[300px]" style={{ borderColor: 'rgba(0, 218, 243, 0.1)' }}>
             <BeamScene />
             <ViewportHud />
           </div>
+          {/* Lower Section: 2D View & Data Table */}
           <DataPanel />
         </main>
         <ParamPanel />
