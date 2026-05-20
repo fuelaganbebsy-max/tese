@@ -3,6 +3,21 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 import './index.css';
 
+// 防止旧 localStorage 数据导致白屏：版本不匹配或数据损坏时清除
+try {
+  const raw = localStorage.getItem('rebar-3d-beam');
+  if (raw) {
+    const parsed = JSON.parse(raw);
+    const CURRENT_VERSION = 6;
+    if (!parsed?.state?.params?.spans || parsed?.version !== CURRENT_VERSION) {
+      localStorage.removeItem('rebar-3d-beam');
+      console.warn('[store] Cleared stale/corrupted beam store data (version mismatch or missing spans)');
+    }
+  }
+} catch {
+  localStorage.removeItem('rebar-3d-beam');
+}
+
 class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { error: Error | null }> {
   state = { error: null as Error | null };
   static getDerivedStateFromError(error: Error) { return { error }; }

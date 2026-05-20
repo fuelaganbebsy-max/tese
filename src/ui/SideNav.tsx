@@ -25,8 +25,14 @@ export function SideNav() {
   const switchMember = useMemberStore((s) => s.switchMember);
   const [expandedGroup, setExpandedGroup] = useState<string | null>('KL');
 
+  const loadSubtype = useBeamStore((s) => s.loadSubtype);
+  const BEAM_SUBTYPES: MemberType[] = ['KL', 'L', 'WKL', 'XL'];
+
   const handleSwitch = (type: MemberType) => {
     switchMember(type);
+    if (BEAM_SUBTYPES.includes(type)) {
+      loadSubtype(type);
+    }
   };
 
   const parentFor = (t: MemberType) => getParentType(t);
@@ -82,8 +88,7 @@ export function SideNav() {
 
   return (
     <nav
-      className="bg-[#0d0d0d] border-r border-white/5 flex flex-col py-gutter shrink-0 z-30 transition-[width] duration-200"
-      style={{ width: 240 }}
+      className="bg-[#0d0d0d] border-r border-white/5 flex flex-col py-gutter shrink-0 z-30 w-full h-full"
     >
       {/* Header */}
       <div className="px-gutter mb-6 flex items-center gap-3">

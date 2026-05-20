@@ -9,10 +9,14 @@ import { tubeFromPolyline } from './rebarPath';
  *  z 在 [-(b/2 - cover - dStirrup - d/2), +...]
  */
 
+export type RebarKind = 'top' | 'bottom' | 'support' | 'bottom2-corner' | 'bottom2-mid';
+
 export interface RebarBuilt {
   geometry: THREE.BufferGeometry;
   /** 元数据，用于标注 */
   meta: { label: string; length: number };
+  /** 钢筋类别，用于渲染时区分颜色 */
+  kind?: RebarKind;
 }
 
 const DEFAULT_STIRRUP_DIA = 10; // 用于计算钢筋净位置；从 stirrup 实际值校正
@@ -77,7 +81,7 @@ export function buildTopThrough(p: BeamParams, d: Derived): RebarBuilt[] {
   });
 }
 
-/** 下部钢筋：每跨独立，左右弯锚入支座 */
+/** 下部第一排钢筋：每跨独立，左右弯锚入支座 */
 export function buildBottom(p: BeamParams, d: Derived): RebarBuilt[] {
   const out: RebarBuilt[] = [];
   for (let i = 0; i < p.spans.length; i++) {
@@ -107,9 +111,71 @@ export function buildBottom(p: BeamParams, d: Derived): RebarBuilt[] {
       ];
       out.push({
         geometry: tubeFromPolyline(pts, dia / 2),
-        meta: { label: `第${i + 1}跨下部 ${k + 1}/${sp.bottom.count}`, length: 0 },
+        meta: { label: `第${i + 1}跨下部一排 ${k + 1}/${sp.bottom.count}`, length: 0 },
       });
     });
+
+    // 第二排下部钢筋 (22G101-1)
+    // 角部钢筋 (第一根和最后一根) 伸入支座弯锚；中间钢筋不伸入柱
+    if (sp.bottomRow2 && sp.bottomRow2.count > 0) {
+      const dia2 = sp.bottomRow2.diameter;
+      const clearGap = Math.max(25, dia); // 排间净距 ≥ 25mm 且 ≥ 一排直径
+      const y2 = y + dia / 2 + clearGap + dia2 / 2;
+      const zs2 = distributeZ(p.b, p.cover, dStir, dia2, sp.bottomRow2.count);
+      const anchor2 = d.bottomAnchorPerSpan[i]; // 角筋锚固参数同一排
+      // 二排角筋比一排稍短，避免弯钩重叠：额外内缩一排直径+间隙
+      const inset2 = inset + dia + 5;
+      const xLeft2Anchor = dsp.x0 - sp.hcLeft + p.cover + (isFirst ? inset2 : 0);
+      const xRight2Anchor = dsp.x1 + sp.hcRight - p.cover - (isLast ? inset2 : 0);
+      const yUp2 = y2 + anchor2.vertical;
+
+      zs2.forEach((z, k) => {
+        const isCorner = k === 0 || k === zs2.length - 1;
+        if (isCorner) {
+          // 角筋：伸入支座弯锚（比一排短一个直径+间距，避免弯钩重叠）
+          const pts = [
+            new THREE.Vector3(xLeft2Anchor, yUp2, z),
+            new THREE.Vector3(xLeft2Anchor, y2, z),
+            new THREE.Vector3(xRight2Anchor, y2, z),
+            new THREE.Vector3(xRight2Anchor, yUp2, z),
+          ];
+          out.push({
+            geometry: tubeFromPolyline(pts, dia2 / 2),
+            meta: { label: `第${i + 1}跨下部二排角筋 ${k + 1}/${sp.bottomRow2!.count}`, length: 0 },
+            kind: 'bottom2-corner',
+          });
+        } else {
+          if (sp.bottomRow2MidAnchor) {
+            // 中间筋伸入支座：弯锚（同角筋）
+            const pts = [
+              new THREE.Vector3(xLeft2Anchor, yUp2, z),
+              new THREE.Vector3(xLeft2Anchor, y2, z),
+              new THREE.Vector3(xRight2Anchor, y2, z),
+              new THREE.Vector3(xRight2Anchor, yUp2, z),
+            ];
+            out.push({
+              geometry: tubeFromPolyline(pts, dia2 / 2),
+              meta: { label: `第${i + 1}跨下部二排中间筋 ${k + 1}/${sp.bottomRow2!.count}`, length: 0 },
+              kind: 'bottom2-corner', // 伸入支座时颜色同角筋
+            });
+          } else {
+            // 中间筋不伸入支座：长度 = 0.8ln，两端各缩 0.1ln
+            const shrink = 0.1 * sp.ln;
+            const xLeft2Mid = dsp.x0 + shrink;
+            const xRight2Mid = dsp.x1 - shrink;
+            const pts = [
+              new THREE.Vector3(xLeft2Mid, y2, z),
+              new THREE.Vector3(xRight2Mid, y2, z),
+            ];
+            out.push({
+              geometry: tubeFromPolyline(pts, dia2 / 2),
+              meta: { label: `第${i + 1}跨下部二排中间筋 ${k + 1}/${sp.bottomRow2!.count}`, length: 0 },
+              kind: 'bottom2-mid',
+            });
+          }
+        }
+      });
+    }
   }
   return out;
 }

@@ -1,5 +1,6 @@
 import { bendAnchorStraightMin, bendAnchorVertical, densifiedZoneLength, laE } from '../codes/22G101';
 import type { BeamParams } from './types';
+import type { MemberType } from '../../config';
 
 export interface DerivedSpan {
   /** 该跨在梁全长方向上的起点 x (内净跨起点) */
@@ -115,6 +116,7 @@ export function defaultBeam(): BeamParams {
   return {
     b: 300,
     h: 600,
+    beamColumnGapFront: 150,
     cover: 25,
     concrete: 'C30',
     seismic: 1,
@@ -130,5 +132,110 @@ export function defaultBeam(): BeamParams {
         stirrup: { grade: 'HRB400', diameter: 10, spacingDense: 100, spacingSparse: 200, legs: 2 },
       },
     ],
+    verticalHaunchLeft: { enabled: false, depth: 200, length: 800 },
+    verticalHaunchRight: { enabled: false, depth: 200, length: 800 },
+    horizontalHaunchLeft: { enabled: false, depth: 100, length: 600 },
+    horizontalHaunchRight: { enabled: false, depth: 100, length: 600 },
+    horizontalHaunchFront: { enabled: false, depth: 100, length: 600 },
+    horizontalHaunchBack: { enabled: false, depth: 100, length: 600 },
   };
+}
+
+/** 次梁 L — 非抗震，截面偏小，支座宽取主梁宽 */
+export function defaultL(): BeamParams {
+  return {
+    b: 250,
+    h: 500,
+    beamColumnGapFront: 175,
+    cover: 25,
+    concrete: 'C30',
+    seismic: 4,
+    topThrough: { grade: 'HRB400', diameter: 20, count: 2 },
+    spans: [
+      {
+        ln: 5000,
+        hcLeft: 300,
+        hcRight: 300,
+        bottom: { grade: 'HRB400', diameter: 20, count: 3 },
+        topLeftSupport: { grade: 'HRB400', diameter: 20, count: 2 },
+        topRightSupport: { grade: 'HRB400', diameter: 20, count: 2 },
+        stirrup: { grade: 'HRB400', diameter: 8, spacingDense: 150, spacingSparse: 200, legs: 2 },
+      },
+    ],
+    verticalHaunchLeft: { enabled: false, depth: 150, length: 600 },
+    verticalHaunchRight: { enabled: false, depth: 150, length: 600 },
+    horizontalHaunchLeft: { enabled: false, depth: 75, length: 500 },
+    horizontalHaunchRight: { enabled: false, depth: 75, length: 500 },
+    horizontalHaunchFront: { enabled: false, depth: 75, length: 500 },
+    horizontalHaunchBack: { enabled: false, depth: 75, length: 500 },
+  };
+}
+
+/** 屋面框架梁 WKL — 与 KL 类似，截面稍轻 */
+export function defaultWKL(): BeamParams {
+  return {
+    b: 250,
+    h: 500,
+    beamColumnGapFront: 175,
+    cover: 25,
+    concrete: 'C30',
+    seismic: 2,
+    topThrough: { grade: 'HRB400', diameter: 22, count: 2 },
+    spans: [
+      {
+        ln: 6000,
+        hcLeft: 500,
+        hcRight: 500,
+        bottom: { grade: 'HRB400', diameter: 22, count: 3 },
+        topLeftSupport: { grade: 'HRB400', diameter: 22, count: 2 },
+        topRightSupport: { grade: 'HRB400', diameter: 22, count: 2 },
+        stirrup: { grade: 'HRB400', diameter: 10, spacingDense: 100, spacingSparse: 200, legs: 2 },
+      },
+    ],
+    verticalHaunchLeft: { enabled: false, depth: 200, length: 800 },
+    verticalHaunchRight: { enabled: false, depth: 200, length: 800 },
+    horizontalHaunchLeft: { enabled: false, depth: 100, length: 600 },
+    horizontalHaunchRight: { enabled: false, depth: 100, length: 600 },
+    horizontalHaunchFront: { enabled: false, depth: 100, length: 600 },
+    horizontalHaunchBack: { enabled: false, depth: 100, length: 600 },
+  };
+}
+
+/** 悬挑梁 XL — 单悬挑，左固定右自由，上部筋为主受力筋 */
+export function defaultXL(): BeamParams {
+  return {
+    b: 250,
+    h: 500,
+    beamColumnGapFront: 175,
+    cover: 25,
+    concrete: 'C30',
+    seismic: 2,
+    topThrough: { grade: 'HRB400', diameter: 25, count: 4 },
+    spans: [
+      {
+        ln: 1800,
+        hcLeft: 600,
+        hcRight: 0,
+        bottom: { grade: 'HRB400', diameter: 16, count: 2 },
+        topLeftSupport: { grade: 'HRB400', diameter: 25, count: 2 },
+        stirrup: { grade: 'HRB400', diameter: 8, spacingDense: 100, spacingSparse: 150, legs: 2 },
+      },
+    ],
+    verticalHaunchLeft: { enabled: false, depth: 150, length: 600 },
+    verticalHaunchRight: { enabled: false, depth: 150, length: 600 },
+    horizontalHaunchLeft: { enabled: false, depth: 75, length: 400 },
+    horizontalHaunchRight: { enabled: false, depth: 75, length: 400 },
+    horizontalHaunchFront: { enabled: false, depth: 75, length: 400 },
+    horizontalHaunchBack: { enabled: false, depth: 75, length: 400 },
+  };
+}
+
+/** 根据梁子类型获取默认参数 */
+export function defaultBeamBySubtype(subtype: MemberType): BeamParams {
+  switch (subtype) {
+    case 'L': return defaultL();
+    case 'WKL': return defaultWKL();
+    case 'XL': return defaultXL();
+    default: return defaultBeam();
+  }
 }

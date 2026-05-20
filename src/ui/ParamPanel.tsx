@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useBeamStore } from '../store/beamStore';
 import { useColumnStore } from '../store/columnStore';
-import type { BeamParams, ConcreteGrade, RebarGrade, SeismicLevel, Span } from '../domain/kl/types';
+import type { BeamParams, ConcreteGrade, RebarGrade, SeismicLevel, Span, HaunchSpec } from '../domain/kl/types';
 import type { ColumnParams, ColumnSectionType } from '../domain/kz/types';
 import { useMemberStore } from '../store/memberStore';
 import { getMemberEntry } from '../memberRegistry';
@@ -10,6 +10,18 @@ const COMMON_DIA = [6, 8, 10, 12, 14, 16, 18, 20, 22, 25, 28, 32];
 const GRADES: RebarGrade[] = ['HPB300', 'HRB400', 'HRB500'];
 const CONCRETES: ConcreteGrade[] = ['C25', 'C30', 'C35', 'C40', 'C45', 'C50'];
 const SEISMICS: SeismicLevel[] = [1, 2, 3, 4];
+
+/** 梁纵向钢筋单排最大根数（根据梁宽、保护层、箍筋直径、纵筋直径、箍筋肢数计算） */
+function maxBarsPerRow(b: number, cover: number, stirrupDia: number, barDia: number, legs: number): number {
+  // 可用净宽 = 梁宽 - 两侧(保护层+箍筋直径) - 内部箍筋竖肢占位
+  const innerLegs = Math.max(0, legs / 2 - 1);
+  const available = b - 2 * (cover + stirrupDia) - innerLegs * stirrupDia;
+  // 最小净距: max(25, barDia)
+  const minSpacing = Math.max(25, barDia);
+  // n根筋需要: n*barDia + (n-1)*minSpacing ≤ available
+  const n = Math.floor((available + minSpacing) / (barDia + minSpacing));
+  return Math.max(1, n);
+}
 
 /* ---------- Atoms ---------- */
 
@@ -157,12 +169,20 @@ function SpanEditor({
   total,
   span,
   onChange,
+  beamWidth,
+  cover,
 }: {
   idx: number;
   total: number;
   span: Span;
   onChange: (s: Span) => void;
+  beamWidth: number;
+  cover: number;
 }) {
+  const maxRow1 = maxBarsPerRow(beamWidth, cover, span.stirrup.diameter, span.bottom.diameter, span.stirrup.legs);
+  const row2Count = span.bottomRow2?.count ?? 0;
+  const row2CornerCount = Math.min(2, row2Count);
+  const row2MidCount = Math.max(0, row2Count - 2);
   return (
     <div className="rounded-lg border border-white/5 bg-surface-container-highest/30 overflow-hidden">
       <div className="px-3 py-2 bg-surface-container-highest/50 border-b border-white/5 flex items-center justify-between">
@@ -175,19 +195,80 @@ function SpanEditor({
           <NumField label="左支座 hc" value={span.hcLeft} onChange={(v) => onChange({ ...span, hcLeft: v })} step={50} min={200} max={1200} unit="mm" />
           <NumField label="右支座 hc" value={span.hcRight} onChange={(v) => onChange({ ...span, hcRight: v })} step={50} min={200} max={1200} unit="mm" />
         </div>
-        <BundleEditor label="下部纵筋" value={span.bottom} onChange={(b) => onChange({ ...span, bottom: b })} />
-        <BundleEditor
-          label="左支座负筋"
-          value={span.topLeftSupport ?? { grade: 'HRB400', diameter: 25, count: 2 }}
-          onChange={(b) => onChange({ ...span, topLeftSupport: b })}
-        />
-        <BundleEditor
-          label="右支座负筋"
-          value={span.topRightSupport ?? { grade: 'HRB400', diameter: 25, count: 2 }}
-          onChange={(b) => onChange({ ...span, topRightSupport: b })}
-        />
+
+        {/* ── 上部钢筋 ── */}
         <div className="pt-2 border-t border-white/5 space-y-2">
-          <div className="text-[10px] tracking-widest text-on-surface-variant flex items-center gap-1">
+          <div className="text-[10px] tracking-widest text-on-surface-variant font-bold flex items-center gap-1">
+            <span className="w-2 h-2 rounded-full bg-red-400 inline-block" />
+            上部钢筋
+          </div>
+          <BundleEditor
+            label="左支座负筋"
+            value={span.topLeftSupport ?? { grade: 'HRB400', diameter: 25, count: 2 }}
+            onChange={(b) => onChange({ ...span, topLeftSupport: b })}
+          />
+          <BundleEditor
+            label="右支座负筋"
+            value={span.topRightSupport ?? { grade: 'HRB400', diameter: 25, count: 2 }}
+            onChange={(b) => onChange({ ...span, topRightSupport: b })}
+          />
+        </div>
+
+        {/* ── 下部钢筋 ── */}
+        <div className="pt-2 border-t border-white/5 space-y-2">
+          <div className="text-[10px] tracking-widest text-on-surface-variant font-bold flex items-center gap-1">
+            <span className="w-2 h-2 rounded-full bg-orange-400 inline-block" />
+            下部钢筋
+          </div>
+          <BundleEditor label="下部一排纵筋" value={span.bottom} onChange={(b) => {
+            const newMax = maxBarsPerRow(beamWidth, cover, span.stirrup.diameter, b.diameter, span.stirrup.legs);
+            if (b.count <= newMax) {
+              onChange({ ...span, bottom: b, bottomRow2: undefined });
+            } else {
+              onChange({
+                ...span,
+                bottom: { ...b, count: newMax },
+                bottomRow2: { grade: b.grade, diameter: b.diameter, count: b.count - newMax },
+              });
+            }
+          }} />
+          <div className="text-[10px] text-on-surface-variant flex items-center gap-2">
+            <span>单排最大 <b className="text-primary-fixed-dim">{maxRow1}</b> 根</span>
+            {span.bottomRow2 && (
+              <span className="text-amber-400">→ 一排{span.bottom.count} + 二排{row2Count}</span>
+            )}
+          </div>
+          {span.bottomRow2 && (
+            <div className="pl-2 border-l-2 border-amber-400/30 space-y-2">
+              <div className="text-[10px] text-on-surface-variant font-bold">下部第二排</div>
+              <div className="flex items-center justify-between text-[10px]">
+                <span className="text-blue-400">角部钢筋（伸入支座弯锚）</span>
+                <span className="font-mono text-primary-fixed-dim">{row2CornerCount}⌀{span.bottomRow2.diameter} {span.bottomRow2.grade}</span>
+              </div>
+              {row2MidCount > 0 && (
+                <>
+                  <div className="flex items-center justify-between text-[10px]">
+                    <span className="text-green-400">中间钢筋</span>
+                    <span className="font-mono text-primary-fixed-dim">{row2MidCount}⌀{span.bottomRow2.diameter} {span.bottomRow2.grade}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input type="checkbox" checked={!!span.bottomRow2MidAnchor} className="sr-only peer"
+                        onChange={(e) => onChange({ ...span, bottomRow2MidAnchor: e.target.checked })} />
+                      <div className="w-7 h-4 bg-surface-container-highest rounded-full peer peer-checked:bg-primary-fixed-dim/60 after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:after:translate-x-3" />
+                    </label>
+                    <span className="text-[10px] text-on-surface-variant">{span.bottomRow2MidAnchor ? '中间筋伸入支座' : '中间筋不伸入支座（0.8ln）'}</span>
+                  </div>
+                </>
+              )}
+              <BundleEditor label="二排规格" value={span.bottomRow2} onChange={(b) => onChange({ ...span, bottomRow2: b })} />
+            </div>
+          )}
+        </div>
+
+        {/* ── 箍筋 ── */}
+        <div className="pt-2 border-t border-white/5 space-y-2">
+          <div className="text-[10px] tracking-widest text-on-surface-variant font-bold flex items-center gap-1">
             <span className="material-symbols-outlined text-[12px]">grid_4x4</span>
             箍筋
           </div>
@@ -370,7 +451,7 @@ export function ColumnParamContent() {
             onChange={(v) => update({ seismic: v })}
             fmt={(v) => `抗震${['一', '二', '三', '四'][(v as number) - 1]}级（等级 ${['Ⅰ', 'Ⅱ', 'Ⅲ', 'Ⅳ'][(v as number) - 1]}）`}
           />
-          <NumField label="保护层厚度 c" value={params.cover} onChange={(v) => update({ cover: v })} step={5} min={15} max={50} unit="mm" />
+          <SelectField label="保护层厚度 c" value={params.cover} options={[20, 25, 30, 35, 40, 50]} onChange={(v) => update({ cover: v })} fmt={(v) => `${v} mm`} />
         </div>
 
         <div className="divider-gradient" />
@@ -486,6 +567,44 @@ export function BeamParamContent() {
               className="w-full"
             />
           </div>
+
+          {/* Beam-Column gap */}
+          <div className="flex flex-col gap-1.5">
+            <label className="font-body-sm text-body-sm text-on-surface-variant">梁前边距柱前边</label>
+            <div className="flex items-center gap-2">
+              <input
+                type="range" min={0} max={Math.max(0, 600 - params.b)} value={Math.max(0, Math.min(600 - params.b, params.beamColumnGapFront ?? 150))} step={5}
+                onChange={(e) => update({ beamColumnGapFront: Number(e.target.value) })}
+                className="flex-1"
+              />
+              <div className="relative w-20 shrink-0">
+                <input type="number" min={0} max={Math.max(0, 600 - params.b)} step={5}
+                  value={params.beamColumnGapFront ?? 150}
+                  onChange={(e) => update({ beamColumnGapFront: Math.max(0, Math.min(600 - params.b, Number(e.target.value))) })}
+                  className="w-full bg-surface-container-lowest border border-white/10 rounded px-2 py-1 font-label-numeric text-label-numeric text-on-surface focus:border-primary-fixed-dim focus:ring-1 focus:ring-primary-fixed-dim outline-none text-right pr-8 font-mono"
+                />
+                <span className="absolute right-2 top-1/2 -translate-y-1/2 font-label-numeric text-[10px] text-on-surface-variant pointer-events-none font-mono">mm</span>
+              </div>
+            </div>
+            <div className="flex gap-1.5">
+              {[
+                { label: '齐平', value: 0 },
+                { label: '居中', value: Math.round((600 - params.b) / 2) },
+                { label: '反齐', value: Math.max(0, 600 - params.b) },
+              ].map((opt) => (
+                <button key={opt.label}
+                  onClick={() => update({ beamColumnGapFront: opt.value })}
+                  className={`flex-1 py-1 rounded text-[11px] font-mono border transition-colors duration-150 ${
+                    (params.beamColumnGapFront ?? 150) === opt.value
+                      ? 'bg-primary-fixed-dim/20 border-primary-fixed-dim text-primary-fixed-dim'
+                      : 'bg-surface-container-lowest border-white/10 text-on-surface-variant hover:border-primary-fixed-dim/40'
+                  }`}
+                >
+                  {opt.label} ({opt.value})
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
 
         <div className="divider-gradient" />
@@ -514,19 +633,8 @@ export function BeamParamContent() {
             onChange={(v) => update({ seismic: v })}
             fmt={(v) => `抗震${['一', '二', '三', '四'][(v as number) - 1]}级（等级 ${['Ⅰ', 'Ⅱ', 'Ⅲ', 'Ⅳ'][(v as number) - 1]}）`}
           />
-          <div className="flex flex-col gap-1 pt-2">
-            <label className="font-body-sm text-[11px] text-on-surface-variant">保护层厚度 (Cover Layer)</label>
-            <div className="relative">
-              <input
-                type="number"
-                className="w-full bg-surface-container-lowest border border-white/10 rounded px-3 py-1.5 font-label-numeric text-label-numeric text-on-surface focus:border-primary-fixed-dim focus:ring-1 focus:ring-primary-fixed-dim outline-none text-right pr-10 font-mono"
-                value={params.cover}
-                min={15}
-                max={50}
-                onChange={(e) => update({ cover: Math.max(15, Math.min(50, Number(e.target.value))) })}
-              />
-              <span className="absolute right-3 top-1/2 -translate-y-1/2 font-label-numeric text-[11px] text-on-surface-variant pointer-events-none font-mono">mm</span>
-            </div>
+          <div className="pt-2">
+            <SelectField label="保护层厚度 c" value={params.cover} options={[20, 25, 30, 35, 40, 50]} onChange={(v) => update({ cover: v })} fmt={(v) => `${v} mm`} />
           </div>
         </div>
 
@@ -576,10 +684,232 @@ export function BeamParamContent() {
                 idx={i}
                 total={params.spans.length}
                 span={sp}
+                beamWidth={params.b}
+                cover={params.cover}
                 onChange={(s) => setParams((p) => ({ ...p, spans: p.spans.map((x, k) => (k === i ? s : x)) }))}
               />
             ))}
           </div>
+        </div>
+
+        <div className="divider-gradient" />
+
+        {/* Vertical Haunch Left 竖向加腋（左端） */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h4 className="font-body-sm text-body-sm font-medium text-on-surface font-bold">竖向加腋（左端）</h4>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" checked={params.verticalHaunchLeft?.enabled ?? false}
+                onChange={(e) => update({ verticalHaunchLeft: { ...(params.verticalHaunchLeft ?? { enabled: false, depth: 200, length: 800 }), enabled: e.target.checked } })}
+                className="sr-only peer" />
+              <div className="w-9 h-5 bg-surface-container-highest rounded-full peer peer-checked:bg-primary-fixed-dim/60 after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-full" />
+            </label>
+          </div>
+          {params.verticalHaunchLeft?.enabled && (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="flex flex-col gap-1">
+                <label className="font-body-sm text-[11px] text-on-surface-variant">加腋深度</label>
+                <div className="relative">
+                  <input type="number" className="w-full bg-surface-container-lowest border border-white/10 rounded px-3 py-1.5 font-label-numeric text-label-numeric text-on-surface focus:border-primary-fixed-dim focus:ring-1 focus:ring-primary-fixed-dim outline-none text-right pr-10 font-mono"
+                    value={params.verticalHaunchLeft.depth} min={50} max={500} step={50}
+                    onChange={(e) => update({ verticalHaunchLeft: { ...params.verticalHaunchLeft, depth: Number(e.target.value) } })} />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 font-label-numeric text-[11px] text-on-surface-variant pointer-events-none font-mono">mm</span>
+                </div>
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="font-body-sm text-[11px] text-on-surface-variant">加腋长度</label>
+                <div className="relative">
+                  <input type="number" className="w-full bg-surface-container-lowest border border-white/10 rounded px-3 py-1.5 font-label-numeric text-label-numeric text-on-surface focus:border-primary-fixed-dim focus:ring-1 focus:ring-primary-fixed-dim outline-none text-right pr-10 font-mono"
+                    value={params.verticalHaunchLeft.length} min={200} max={2000} step={100}
+                    onChange={(e) => update({ verticalHaunchLeft: { ...params.verticalHaunchLeft, length: Number(e.target.value) } })} />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 font-label-numeric text-[11px] text-on-surface-variant pointer-events-none font-mono">mm</span>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Vertical Haunch Right 竖向加腋（右端） */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h4 className="font-body-sm text-body-sm font-medium text-on-surface font-bold">竖向加腋（右端）</h4>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" checked={params.verticalHaunchRight?.enabled ?? false}
+                onChange={(e) => update({ verticalHaunchRight: { ...(params.verticalHaunchRight ?? { enabled: false, depth: 200, length: 800 }), enabled: e.target.checked } })}
+                className="sr-only peer" />
+              <div className="w-9 h-5 bg-surface-container-highest rounded-full peer peer-checked:bg-primary-fixed-dim/60 after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-full" />
+            </label>
+          </div>
+          {params.verticalHaunchRight?.enabled && (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="flex flex-col gap-1">
+                <label className="font-body-sm text-[11px] text-on-surface-variant">加腋深度</label>
+                <div className="relative">
+                  <input type="number" className="w-full bg-surface-container-lowest border border-white/10 rounded px-3 py-1.5 font-label-numeric text-label-numeric text-on-surface focus:border-primary-fixed-dim focus:ring-1 focus:ring-primary-fixed-dim outline-none text-right pr-10 font-mono"
+                    value={params.verticalHaunchRight.depth} min={50} max={500} step={50}
+                    onChange={(e) => update({ verticalHaunchRight: { ...params.verticalHaunchRight, depth: Number(e.target.value) } })} />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 font-label-numeric text-[11px] text-on-surface-variant pointer-events-none font-mono">mm</span>
+                </div>
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="font-body-sm text-[11px] text-on-surface-variant">加腋长度</label>
+                <div className="relative">
+                  <input type="number" className="w-full bg-surface-container-lowest border border-white/10 rounded px-3 py-1.5 font-label-numeric text-label-numeric text-on-surface focus:border-primary-fixed-dim focus:ring-1 focus:ring-primary-fixed-dim outline-none text-right pr-10 font-mono"
+                    value={params.verticalHaunchRight.length} min={200} max={2000} step={100}
+                    onChange={(e) => update({ verticalHaunchRight: { ...params.verticalHaunchRight, length: Number(e.target.value) } })} />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 font-label-numeric text-[11px] text-on-surface-variant pointer-events-none font-mono">mm</span>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Horizontal Haunch Left 水平加腋（左） */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h4 className="font-body-sm text-body-sm font-medium text-on-surface font-bold">水平加腋（左）</h4>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={params.horizontalHaunchLeft?.enabled ?? false}
+                onChange={(e) => update({ horizontalHaunchLeft: { ...(params.horizontalHaunchLeft ?? { enabled: false, depth: 100, length: 600 }), enabled: e.target.checked } })}
+                className="sr-only peer"
+              />
+              <div className="w-9 h-5 bg-surface-container-highest rounded-full peer peer-checked:bg-primary-fixed-dim/60 after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-full" />
+            </label>
+          </div>
+          {params.horizontalHaunchLeft?.enabled && (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="flex flex-col gap-1">
+                <label className="font-body-sm text-[11px] text-on-surface-variant">加腋宽度</label>
+                <div className="relative">
+                  <input type="number" className="w-full bg-surface-container-lowest border border-white/10 rounded px-3 py-1.5 font-label-numeric text-label-numeric text-on-surface focus:border-primary-fixed-dim focus:ring-1 focus:ring-primary-fixed-dim outline-none text-right pr-10 font-mono"
+                    value={params.horizontalHaunchLeft.depth} min={50} max={300} step={25}
+                    onChange={(e) => update({ horizontalHaunchLeft: { ...params.horizontalHaunchLeft, depth: Number(e.target.value) } })} />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 font-label-numeric text-[11px] text-on-surface-variant pointer-events-none font-mono">mm</span>
+                </div>
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="font-body-sm text-[11px] text-on-surface-variant">加腋长度</label>
+                <div className="relative">
+                  <input type="number" className="w-full bg-surface-container-lowest border border-white/10 rounded px-3 py-1.5 font-label-numeric text-label-numeric text-on-surface focus:border-primary-fixed-dim focus:ring-1 focus:ring-primary-fixed-dim outline-none text-right pr-10 font-mono"
+                    value={params.horizontalHaunchLeft.length} min={200} max={2000} step={100}
+                    onChange={(e) => update({ horizontalHaunchLeft: { ...params.horizontalHaunchLeft, length: Number(e.target.value) } })} />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 font-label-numeric text-[11px] text-on-surface-variant pointer-events-none font-mono">mm</span>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Horizontal Haunch Right 水平加腋（右） */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h4 className="font-body-sm text-body-sm font-medium text-on-surface font-bold">水平加腋（右）</h4>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={params.horizontalHaunchRight?.enabled ?? false}
+                onChange={(e) => update({ horizontalHaunchRight: { ...(params.horizontalHaunchRight ?? { enabled: false, depth: 100, length: 600 }), enabled: e.target.checked } })}
+                className="sr-only peer"
+              />
+              <div className="w-9 h-5 bg-surface-container-highest rounded-full peer peer-checked:bg-primary-fixed-dim/60 after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-full" />
+            </label>
+          </div>
+          {params.horizontalHaunchRight?.enabled && (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="flex flex-col gap-1">
+                <label className="font-body-sm text-[11px] text-on-surface-variant">加腋宽度</label>
+                <div className="relative">
+                  <input type="number" className="w-full bg-surface-container-lowest border border-white/10 rounded px-3 py-1.5 font-label-numeric text-label-numeric text-on-surface focus:border-primary-fixed-dim focus:ring-1 focus:ring-primary-fixed-dim outline-none text-right pr-10 font-mono"
+                    value={params.horizontalHaunchRight.depth} min={50} max={300} step={25}
+                    onChange={(e) => update({ horizontalHaunchRight: { ...params.horizontalHaunchRight, depth: Number(e.target.value) } })} />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 font-label-numeric text-[11px] text-on-surface-variant pointer-events-none font-mono">mm</span>
+                </div>
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="font-body-sm text-[11px] text-on-surface-variant">加腋长度</label>
+                <div className="relative">
+                  <input type="number" className="w-full bg-surface-container-lowest border border-white/10 rounded px-3 py-1.5 font-label-numeric text-label-numeric text-on-surface focus:border-primary-fixed-dim focus:ring-1 focus:ring-primary-fixed-dim outline-none text-right pr-10 font-mono"
+                    value={params.horizontalHaunchRight.length} min={200} max={2000} step={100}
+                    onChange={(e) => update({ horizontalHaunchRight: { ...params.horizontalHaunchRight, length: Number(e.target.value) } })} />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 font-label-numeric text-[11px] text-on-surface-variant pointer-events-none font-mono">mm</span>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Horizontal Haunch Front 水平加腋（前侧） */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h4 className="font-body-sm text-body-sm font-medium text-on-surface font-bold">水平加腋（前侧）</h4>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox"
+                checked={params.horizontalHaunchFront?.enabled ?? false}
+                onChange={(e) => update({ horizontalHaunchFront: { ...(params.horizontalHaunchFront ?? { enabled: false, depth: 100, length: 600 }), enabled: e.target.checked } })}
+                className="sr-only peer" />
+              <div className="w-9 h-5 bg-surface-container-highest rounded-full peer peer-checked:bg-primary-fixed-dim/60 after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-full" />
+            </label>
+          </div>
+          {params.horizontalHaunchFront?.enabled && (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="flex flex-col gap-1">
+                <label className="font-body-sm text-[11px] text-on-surface-variant">加腋宽度</label>
+                <div className="relative">
+                  <input type="number" className="w-full bg-surface-container-lowest border border-white/10 rounded px-3 py-1.5 font-label-numeric text-label-numeric text-on-surface focus:border-primary-fixed-dim focus:ring-1 focus:ring-primary-fixed-dim outline-none text-right pr-10 font-mono"
+                    value={params.horizontalHaunchFront.depth} min={50} max={300} step={25}
+                    onChange={(e) => update({ horizontalHaunchFront: { ...params.horizontalHaunchFront, depth: Number(e.target.value) } })} />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 font-label-numeric text-[11px] text-on-surface-variant pointer-events-none font-mono">mm</span>
+                </div>
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="font-body-sm text-[11px] text-on-surface-variant">加腋长度</label>
+                <div className="relative">
+                  <input type="number" className="w-full bg-surface-container-lowest border border-white/10 rounded px-3 py-1.5 font-label-numeric text-label-numeric text-on-surface focus:border-primary-fixed-dim focus:ring-1 focus:ring-primary-fixed-dim outline-none text-right pr-10 font-mono"
+                    value={params.horizontalHaunchFront.length} min={200} max={2000} step={100}
+                    onChange={(e) => update({ horizontalHaunchFront: { ...params.horizontalHaunchFront, length: Number(e.target.value) } })} />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 font-label-numeric text-[11px] text-on-surface-variant pointer-events-none font-mono">mm</span>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Horizontal Haunch Back 水平加腋（后侧） */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h4 className="font-body-sm text-body-sm font-medium text-on-surface font-bold">水平加腋（后侧）</h4>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox"
+                checked={params.horizontalHaunchBack?.enabled ?? false}
+                onChange={(e) => update({ horizontalHaunchBack: { ...(params.horizontalHaunchBack ?? { enabled: false, depth: 100, length: 600 }), enabled: e.target.checked } })}
+                className="sr-only peer" />
+              <div className="w-9 h-5 bg-surface-container-highest rounded-full peer peer-checked:bg-primary-fixed-dim/60 after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-full" />
+            </label>
+          </div>
+          {params.horizontalHaunchBack?.enabled && (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="flex flex-col gap-1">
+                <label className="font-body-sm text-[11px] text-on-surface-variant">加腋宽度</label>
+                <div className="relative">
+                  <input type="number" className="w-full bg-surface-container-lowest border border-white/10 rounded px-3 py-1.5 font-label-numeric text-label-numeric text-on-surface focus:border-primary-fixed-dim focus:ring-1 focus:ring-primary-fixed-dim outline-none text-right pr-10 font-mono"
+                    value={params.horizontalHaunchBack.depth} min={50} max={300} step={25}
+                    onChange={(e) => update({ horizontalHaunchBack: { ...params.horizontalHaunchBack, depth: Number(e.target.value) } })} />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 font-label-numeric text-[11px] text-on-surface-variant pointer-events-none font-mono">mm</span>
+                </div>
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="font-body-sm text-[11px] text-on-surface-variant">加腋长度</label>
+                <div className="relative">
+                  <input type="number" className="w-full bg-surface-container-lowest border border-white/10 rounded px-3 py-1.5 font-label-numeric text-label-numeric text-on-surface focus:border-primary-fixed-dim focus:ring-1 focus:ring-primary-fixed-dim outline-none text-right pr-10 font-mono"
+                    value={params.horizontalHaunchBack.length} min={200} max={2000} step={100}
+                    onChange={(e) => update({ horizontalHaunchBack: { ...params.horizontalHaunchBack, length: Number(e.target.value) } })} />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 font-label-numeric text-[11px] text-on-surface-variant pointer-events-none font-mono">mm</span>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Apply button */}
@@ -628,7 +958,7 @@ export function ParamPanel() {
   }
 
   return (
-    <aside className="bg-[#0d0d0d] border-l border-white/5 flex flex-col h-full shrink-0 z-30" style={{ width: 280 }}>
+    <aside className="bg-[#0d0d0d] border-l border-white/5 flex flex-col h-full shrink-0 z-30 w-full">
       {/* Inspector Nav Tabs */}
       <div className="flex border-b border-white/10 shrink-0 bg-surface-container-highest/50">
         <button

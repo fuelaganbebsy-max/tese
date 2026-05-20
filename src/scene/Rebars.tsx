@@ -7,6 +7,8 @@ import { buildStirrupUnitGeometry } from '../geometry/buildStirrup';
 
 const REBAR_TOP_COLOR = '#ef5350';
 const REBAR_BOT_COLOR = '#ffa726';
+const REBAR_BOT2_CORNER_COLOR = '#42a5f5'; // 二排角筋（伸入柱弯锚）— 蓝色
+const REBAR_BOT2_MID_COLOR = '#66bb6a';    // 二排中间筋（直锚12d不弯折）— 绿色
 const REBAR_SUP_COLOR = '#ab47bc';
 const STIRRUP_COLOR = '#78909c';
 
@@ -52,11 +54,16 @@ export function Rebars() {
           <meshStandardMaterial color={REBAR_TOP_COLOR} metalness={0.7} roughness={0.35} envMapIntensity={1.2} />
         </mesh>
       ))}
-      {bot.map((r, i) => (
-        <mesh key={`b-${i}`} geometry={r.geometry} renderOrder={1}>
-          <meshStandardMaterial color={REBAR_BOT_COLOR} metalness={0.7} roughness={0.35} envMapIntensity={1.2} />
-        </mesh>
-      ))}
+      {bot.map((r, i) => {
+        const color = r.kind === 'bottom2-corner' ? REBAR_BOT2_CORNER_COLOR
+          : r.kind === 'bottom2-mid' ? REBAR_BOT2_MID_COLOR
+          : REBAR_BOT_COLOR;
+        return (
+          <mesh key={`b-${i}`} geometry={r.geometry} renderOrder={1}>
+            <meshStandardMaterial color={color} metalness={0.7} roughness={0.35} envMapIntensity={1.2} />
+          </mesh>
+        );
+      })}
       {sup.map((r, i) => (
         <mesh key={`s-${i}`} geometry={r.geometry} renderOrder={1}>
           <meshStandardMaterial color={REBAR_SUP_COLOR} metalness={0.7} roughness={0.35} envMapIntensity={1.2} />

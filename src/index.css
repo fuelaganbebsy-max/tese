@@ -76,7 +76,7 @@ input[type='range'] {
   -webkit-appearance: none;
   appearance: none;
   height: 6px;
-  background: #0b0f10;
+  background: rgba(0, 218, 243, 0.15);
   border-radius: 9999px;
   cursor: pointer;
 }

@@ -1,7 +1,8 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { BeamParams } from '../domain/kl/types';
-import { defaultBeam } from '../domain/kl/derive';
+import { defaultBeam, defaultBeamBySubtype } from '../domain/kl/derive';
+import type { MemberType } from '../config';
 
 interface ViewState {
   showConcrete: boolean;
@@ -36,6 +37,7 @@ interface BeamStore {
   canUndo: () => boolean;
   canRedo: () => boolean;
   reset: () => void;
+  loadSubtype: (subtype: MemberType) => void;
 }
 
 export const useBeamStore = create<BeamStore>()(persist(
@@ -78,10 +80,36 @@ export const useBeamStore = create<BeamStore>()(persist(
     _history: [...s._history, s.params].slice(-MAX_HISTORY),
     _future: [],
   })),
+  loadSubtype: (subtype) => set((s) => ({
+    params: defaultBeamBySubtype(subtype),
+    _history: [...s._history, s.params].slice(-MAX_HISTORY),
+    _future: [],
+  })),
 }),
   {
     name: 'rebar-3d-beam',
-    version: 1,
+    version: 6,
     partialize: (state) => ({ params: state.params, view: state.view }),
+    migrate: (persisted: any) => {
+      try {
+        if (persisted && persisted.params) {
+          const p = persisted.params;
+          delete p.verticalHaunch;
+          delete p.horizontalHaunch;
+          // v5→v6: add beam-column gap
+          if (p.beamColumnGapFront == null) p.beamColumnGapFront = 150;
+          if (!p.verticalHaunchLeft) p.verticalHaunchLeft = { enabled: false, depth: 200, length: 800 };
+          if (!p.verticalHaunchRight) p.verticalHaunchRight = { enabled: false, depth: 200, length: 800 };
+          if (!p.horizontalHaunchLeft) p.horizontalHaunchLeft = { enabled: false, depth: 100, length: 600 };
+          if (!p.horizontalHaunchRight) p.horizontalHaunchRight = { enabled: false, depth: 100, length: 600 };
+          if (!p.horizontalHaunchFront) p.horizontalHaunchFront = { enabled: false, depth: 100, length: 600 };
+          if (!p.horizontalHaunchBack) p.horizontalHaunchBack = { enabled: false, depth: 100, length: 600 };
+        }
+        return persisted;
+      } catch {
+        // 迁移失败时清除坏数据，使用全新默认值
+        return undefined;
+      }
+    },
   },
 ));
