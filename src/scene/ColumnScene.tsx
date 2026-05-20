@@ -1,12 +1,13 @@
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, GizmoHelper, GizmoViewport, Grid, Environment } from '@react-three/drei';
-import { useMemo } from 'react';
+import { useMemo, useEffect, useRef } from 'react';
 import * as THREE from 'three';
-import { deriveColumn, defaultColumn } from '../domain/kz/derive';
+import { deriveColumn } from '../domain/kz/derive';
 import type { ColumnParams } from '../domain/kz/types';
+import { useColumnStore } from '../store/columnStore';
 
 // 柱体混凝土
-function ColumnConcrete({ params, derived }: { params: ColumnParams; derived: ReturnType<typeof deriveColumn> }) {
+function ColumnConcrete({ params, derived, show }: { params: ColumnParams; derived: ReturnType<typeof deriveColumn>; show: boolean }) {
   const geo = useMemo(() => {
     if (params.sectionType === 'circle') {
       const g = new THREE.CylinderGeometry(params.D / 2, params.D / 2, params.Hn, 32);
@@ -18,6 +19,8 @@ function ColumnConcrete({ params, derived }: { params: ColumnParams; derived: Re
     return g;
   }, [params.sectionType, params.b, params.h, params.D, params.Hn]);
 
+  if (!show) return null;
+
   return (
     <mesh geometry={geo}>
       <meshStandardMaterial color="#8a9a9e" transparent opacity={0.18} depthWrite={false} roughness={0.95} metalness={0.05} envMapIntensity={0.3} />
@@ -26,7 +29,7 @@ function ColumnConcrete({ params, derived }: { params: ColumnParams; derived: Re
 }
 
 // 纵筋
-function ColumnLongBars({ params, derived }: { params: ColumnParams; derived: ReturnType<typeof deriveColumn> }) {
+function ColumnLongBars({ params, derived, show }: { params: ColumnParams; derived: ReturnType<typeof deriveColumn>; show: boolean }) {
   const bars = useMemo(() => {
     return derived.barPositions.map((pos, i) => {
       const r = params.longitudinal.diameter / 2;
@@ -38,11 +41,12 @@ function ColumnLongBars({ params, derived }: { params: ColumnParams; derived: Re
     });
   }, [derived.barPositions, params.longitudinal.diameter, params.Hn]);
 
+  if (!show) return null;
   return <>{bars}</>;
 }
 
 // 箍筋
-function ColumnStirrups({ params, derived }: { params: ColumnParams; derived: ReturnType<typeof deriveColumn> }) {
+function ColumnStirrups({ params, derived, show }: { params: ColumnParams; derived: ReturnType<typeof deriveColumn>; show: boolean }) {
   const unitGeo = useMemo(() => {
     const c = params.cover + params.stirrup.diameter / 2;
     const w = params.b - 2 * c;
@@ -54,32 +58,10 @@ function ColumnStirrups({ params, derived }: { params: ColumnParams; derived: Re
       return new THREE.TorusGeometry(outerR, r, 8, 32);
     }
 
-    // 矩形箍筋 — 用 4 个 cylinder 拼接
-    const shape = new THREE.Shape();
-    const hw = w / 2, hh = h / 2;
-    shape.moveTo(-hw, -hh);
-    shape.lineTo(hw, -hh);
-    shape.lineTo(hw, hh);
-    shape.lineTo(-hw, hh);
-    shape.closePath();
-
-    const innerShape = new THREE.Shape();
-    const iw = hw - r * 2, ih = hh - r * 2;
-    innerShape.moveTo(-iw, -ih);
-    innerShape.lineTo(iw, -ih);
-    innerShape.lineTo(iw, ih);
-    innerShape.lineTo(-iw, ih);
-    innerShape.closePath();
-
-    const extrudeSettings = { depth: params.stirrup.diameter, bevelEnabled: false };
-    const geo = new THREE.ExtrudeGeometry(shape, extrudeSettings);
-    // Punch out inner
-    const innerGeo = new THREE.ExtrudeGeometry(innerShape, extrudeSettings);
-
-    // Use simple box-ring approach: create ring from 4 thin boxes
-    const group = new THREE.BufferGeometry();
+    // 矩形箍筋 — 用 4 个 box 拼接
     const boxes: THREE.BufferGeometry[] = [];
     const d = params.stirrup.diameter;
+    const hw = w / 2, hh = h / 2;
     // top
     const top = new THREE.BoxGeometry(w + d, d, d);
     top.translate(0, hh, 0);
@@ -102,34 +84,25 @@ function ColumnStirrups({ params, derived }: { params: ColumnParams; derived: Re
 
   // Instanced mesh for all stirrups
   const count = derived.stirrupYs.length;
-  const meshRef = useMemo(() => {
-    const dummy = new THREE.Object3D();
-    const matrices: THREE.Matrix4[] = [];
-    derived.stirrupYs.forEach((y) => {
-      dummy.position.set(0, y, 0);
-      if (params.sectionType === 'circle') {
-        dummy.rotation.set(Math.PI / 2, 0, 0);
-      } else {
-        dummy.rotation.set(Math.PI / 2, 0, 0);
-      }
-      dummy.updateMatrix();
-      matrices.push(dummy.matrix.clone());
-    });
-    return matrices;
-  }, [derived.stirrupYs, params.sectionType]);
+  const ref = useRef<THREE.InstancedMesh>(null);
 
-  if (!unitGeo || count === 0) return null;
+  useEffect(() => {
+    if (!ref.current) return;
+    const dummy = new THREE.Object3D();
+    derived.stirrupYs.forEach((y, i) => {
+      dummy.position.set(0, y, 0);
+      dummy.rotation.set(Math.PI / 2, 0, 0);
+      dummy.updateMatrix();
+      ref.current!.setMatrixAt(i, dummy.matrix);
+    });
+    ref.current.instanceMatrix.needsUpdate = true;
+  }, [derived.stirrupYs]);
+
+  if (!show || !unitGeo || count === 0) return null;
 
   return (
-    <instancedMesh args={[unitGeo, undefined, count]}>
+    <instancedMesh ref={ref} args={[unitGeo, undefined, count]}>
       <meshStandardMaterial color="#78909c" metalness={0.65} roughness={0.4} envMapIntensity={1.0} />
-      {meshRef.map((m, i) => (
-        <primitive key={i} object={(() => {
-          const o = new THREE.Object3D();
-          o.applyMatrix4(m);
-          return o;
-        })()} />
-      ))}
     </instancedMesh>
   );
 }
@@ -162,7 +135,8 @@ function mergeGeometries(geos: THREE.BufferGeometry[]): THREE.BufferGeometry {
 }
 
 export function ColumnScene() {
-  const params = defaultColumn();
+  const params = useColumnStore((s) => s.params);
+  const view = useColumnStore((s) => s.view);
   const derived = useMemo(() => deriveColumn(params), [params]);
 
   const camDist = Math.max(params.Hn * 1.5, 3000);
@@ -181,9 +155,9 @@ export function ColumnScene() {
       <directionalLight position={[-camDist * 0.3, params.Hn, -camDist * 0.3]} intensity={0.4} color="#94a3b8" />
       <Environment preset="city" background={false} />
 
-      <ColumnConcrete params={params} derived={derived} />
-      <ColumnLongBars params={params} derived={derived} />
-      <ColumnStirrups params={params} derived={derived} />
+      <ColumnConcrete params={params} derived={derived} show={view.showConcrete} />
+      <ColumnLongBars params={params} derived={derived} show={view.showLongitudinal} />
+      <ColumnStirrups params={params} derived={derived} show={view.showStirrups} />
 
       <Grid
         position={[0, 0, 0]}

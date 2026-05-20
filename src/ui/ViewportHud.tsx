@@ -1,15 +1,39 @@
 import { useMemo } from 'react';
 import { useBeamStore } from '../store/beamStore';
+import { useColumnStore } from '../store/columnStore';
+import { useMemberStore } from '../store/memberStore';
 import { derive } from '../domain/kl/derive';
+import { deriveColumn } from '../domain/kz/derive';
 
 export function ViewportHud() {
-  const params = useBeamStore((s) => s.params);
-  const view = useBeamStore((s) => s.view);
-  const setView = useBeamStore((s) => s.setView);
-  const setCameraCommand = useBeamStore((s) => s.setCameraCommand);
-  const d = useMemo(() => derive(params), [params]);
+  const activeType = useMemberStore((s) => s.activeType);
+  const isBeam = activeType === 'KL' || activeType === 'L' || activeType === 'WKL' || activeType === 'XL';
 
-  const stirrupCount = d.spans.reduce((s, sp) => s + sp.stirrupXs.length, 0);
+  const beamParams = useBeamStore((s) => s.params);
+  const beamView = useBeamStore((s) => s.view);
+  const beamSetView = useBeamStore((s) => s.setView);
+  const beamSetCamera = useBeamStore((s) => s.setCameraCommand);
+  const beamD = useMemo(() => derive(beamParams), [beamParams]);
+
+  const colParams = useColumnStore((s) => s.params);
+  const colView = useColumnStore((s) => s.view);
+  const colSetView = useColumnStore((s) => s.setView);
+  const colSetCamera = useColumnStore((s) => s.setCameraCommand);
+  const colD = useMemo(() => deriveColumn(colParams), [colParams]);
+
+  const view = isBeam ? beamView : colView;
+  const setView = isBeam ? beamSetView : colSetView;
+  const setCameraCommand = isBeam ? beamSetCamera : colSetCamera;
+
+  const stirrupCount = isBeam
+    ? beamD.spans.reduce((s, sp) => s + sp.stirrupXs.length, 0)
+    : colD.stirrupYs.length;
+
+  const dimLabel = isBeam
+    ? `${beamParams.b}\u00d7${beamParams.h}`
+    : colParams.sectionType === 'circle'
+      ? `\u2205${colParams.D}`
+      : `${colParams.b}\u00d7${colParams.h}`;
 
   return (
     <>
@@ -19,7 +43,7 @@ export function ViewportHud() {
         <div className="pointer-events-auto flex items-center gap-2 bg-surface-container-highest/80 backdrop-blur-md px-3 py-1.5 rounded-DEFAULT border border-white/10">
           <span className="w-2 h-2 rounded-full bg-primary-fixed-dim animate-pulse" />
           <span className="font-label-numeric text-label-numeric text-on-surface text-[11px] font-mono">
-            KL-1({params.spans.length}) {params.b}×{params.h} 渲染中
+            {isBeam ? `${activeType}-1(${beamParams.spans.length}) ${dimLabel} 渲染中` : `KZ-1 ${dimLabel} 渲染中`}
           </span>
         </div>
 
@@ -71,9 +95,11 @@ export function ViewportHud() {
           <span className="px-2 py-1 rounded bg-surface-container-highest/90 border border-white/5 font-label-numeric text-label-numeric text-on-surface-variant text-[10px] font-mono">
             箍筋: {stirrupCount}
           </span>
-          <span className="hidden md:inline-block px-2 py-1 rounded bg-surface-container-highest/90 border border-white/5 font-label-numeric text-label-numeric text-on-surface-variant text-[10px] font-mono">
-            laE: {d.topAnchor.laE.toFixed(0)}
-          </span>
+          {isBeam && (
+            <span className="hidden md:inline-block px-2 py-1 rounded bg-surface-container-highest/90 border border-white/5 font-label-numeric text-label-numeric text-on-surface-variant text-[10px] font-mono">
+              laE: {beamD.topAnchor.laE.toFixed(0)}
+            </span>
+          )}
         </div>
 
         <div className="hidden xl:block text-[10px] text-on-surface-variant/50 text-right leading-relaxed pointer-events-auto">

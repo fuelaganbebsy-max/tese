@@ -1,6 +1,16 @@
+import { useState } from 'react';
 import { useBeamStore } from '../store/beamStore';
 import { useMemberStore } from '../store/memberStore';
-import { MEMBER_TYPES, MEMBER_LABELS, MEMBER_ICONS, MEMBER_STATUS, type MemberType } from '../config';
+import {
+  PARENT_TYPES,
+  PARENT_LABELS,
+  MEMBER_SUBTYPES,
+  MEMBER_LABELS,
+  MEMBER_ICONS,
+  MEMBER_STATUS,
+  getParentType,
+  type MemberType,
+} from '../config';
 
 const STATUS_DOT: Record<string, string> = {
   ready: 'bg-green-400',
@@ -13,10 +23,13 @@ export function SideNav() {
   const setUi = useBeamStore((s) => s.setUi);
   const activeType = useMemberStore((s) => s.activeType);
   const switchMember = useMemberStore((s) => s.switchMember);
+  const [expandedGroup, setExpandedGroup] = useState<string | null>('KL');
 
   const handleSwitch = (type: MemberType) => {
     switchMember(type);
   };
+
+  const parentFor = (t: MemberType) => getParentType(t);
 
   if (collapsed) {
     return (
@@ -28,27 +41,33 @@ export function SideNav() {
         >
           <span className="material-symbols-outlined text-[20px]">menu</span>
         </button>
-        {MEMBER_TYPES.map((type) => {
-          const active = type === activeType;
-          const status = MEMBER_STATUS[type];
+        {PARENT_TYPES.map((type) => {
+          const subtypes = MEMBER_SUBTYPES[type];
+          const isSingle = subtypes.length <= 1;
+          // In collapsed mode, show parent icon as active if any child is active
+          const hasActiveChild = subtypes.some((st) => st === activeType);
           return (
             <button
               key={type}
-              title={`${MEMBER_LABELS[type]} (${type})${status === 'planned' ? ' — 开发中' : ''}`}
-              onClick={() => handleSwitch(type)}
+              title={PARENT_LABELS[type]}
+              onClick={() => {
+                // Single: switch to the only type. Multi: expand group first, switch to first child
+                const target = isSingle ? subtypes[0] : subtypes[0];
+                handleSwitch(target as MemberType);
+              }}
               className={`p-2 rounded-lg transition-all relative ${
-                active
+                hasActiveChild
                   ? 'bg-primary-container/10 text-primary-fixed-dim'
                   : 'text-on-surface-variant opacity-70 hover:bg-white/5 hover:text-on-surface'
               }`}
             >
               <span
                 className="material-symbols-outlined text-[20px]"
-                style={active ? { fontVariationSettings: "'FILL' 1" } : undefined}
+                style={hasActiveChild ? { fontVariationSettings: "'FILL' 1" } : undefined}
               >
-                {MEMBER_ICONS[type]}
+                {MEMBER_ICONS[subtypes[0]]}
               </span>
-              <span className={`absolute top-1 right-1 w-1.5 h-1.5 rounded-full ${STATUS_DOT[status]}`} />
+              <span className={`absolute top-1 right-1 w-1.5 h-1.5 rounded-full ${STATUS_DOT[MEMBER_STATUS[subtypes[0]]]}`} />
             </button>
           );
         })}
@@ -84,31 +103,90 @@ export function SideNav() {
         </div>
       </div>
 
-      {/* Member Type Tabs */}
+      {/* Member Type Groups */}
       <div className="flex-1 flex flex-col gap-1 px-2 overflow-y-auto">
-        {MEMBER_TYPES.map((type) => {
-          const active = type === activeType;
-          const status = MEMBER_STATUS[type];
+        {PARENT_TYPES.map((parentType) => {
+          const subtypes = MEMBER_SUBTYPES[parentType] as readonly MemberType[];
+          const isSingle = subtypes.length <= 1;
+          const isExpanded = expandedGroup === parentType;
+          const hasActiveChild = subtypes.some((st) => st === activeType);
+
           return (
-            <button
-              key={type}
-              onClick={() => handleSwitch(type)}
-              className={
-                active
-                  ? 'flex items-center gap-4 bg-primary-container/10 text-primary-fixed-dim border-r-4 border-primary-fixed-dim px-4 py-3 rounded-lg font-bold bg-white/5 text-left'
-                  : 'flex items-center gap-4 text-on-surface-variant px-4 py-3 opacity-70 hover:bg-white/5 hover:text-on-surface transition-all rounded-lg active:translate-x-1 duration-150 text-left'
-              }
-            >
-              <span
-                className="material-symbols-outlined"
-                style={active ? { fontVariationSettings: "'FILL' 1" } : undefined}
+            <div key={parentType} className="flex flex-col">
+              {/* Parent header */}
+              <button
+                onClick={() => {
+                  if (isSingle) {
+                    handleSwitch(subtypes[0]);
+                  } else {
+                    setExpandedGroup(isExpanded ? null : parentType);
+                  }
+                }}
+                className={
+                  isSingle && hasActiveChild
+                    ? 'flex items-center gap-4 bg-primary-container/10 text-primary-fixed-dim border-r-4 border-primary-fixed-dim px-4 py-3 rounded-lg font-bold bg-white/5 text-left'
+                    : 'flex items-center gap-4 text-on-surface-variant px-4 py-3 opacity-70 hover:bg-white/5 hover:text-on-surface transition-all rounded-lg active:translate-x-1 duration-150 text-left'
+                }
               >
-                {MEMBER_ICONS[type]}
-              </span>
-              <span className="font-label-numeric text-label-numeric font-mono flex-1">{MEMBER_LABELS[type]}</span>
-              <span className="font-mono text-[10px] text-on-surface-variant/60">{type}</span>
-              <span className={`w-2 h-2 rounded-full shrink-0 ${STATUS_DOT[status]}`} title={status === 'ready' ? '可用' : status === 'dev' ? '开发中' : '规划中'} />
-            </button>
+                <span
+                  className="material-symbols-outlined"
+                  style={hasActiveChild ? { fontVariationSettings: "'FILL' 1" } : undefined}
+                >
+                  {MEMBER_ICONS[subtypes[0]]}
+                </span>
+                <span className="font-label-numeric text-label-numeric font-mono flex-1">
+                  {PARENT_LABELS[parentType]}
+                </span>
+                {!isSingle && (
+                  <span className="material-symbols-outlined text-[16px] transition-transform duration-200"
+                    style={{ transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)' }}
+                  >
+                    chevron_right
+                  </span>
+                )}
+                <span className={`w-2 h-2 rounded-full shrink-0 ${STATUS_DOT[MEMBER_STATUS[subtypes[0]]]}`}
+                  title={
+                    MEMBER_STATUS[subtypes[0]] === 'ready' ? '可用' :
+                    MEMBER_STATUS[subtypes[0]] === 'dev' ? '开发中' : '规划中'
+                  }
+                />
+              </button>
+
+              {/* Sub-items (only for multi-type groups) */}
+              {!isSingle && isExpanded && (
+                <div className="ml-1 mt-0.5 flex flex-col gap-0.5 border-l border-white/10 pl-2">
+                  {subtypes.map((subtype) => {
+                    const active = subtype === activeType;
+                    const status = MEMBER_STATUS[subtype];
+                    return (
+                      <button
+                        key={subtype}
+                        onClick={() => handleSwitch(subtype)}
+                        disabled={status === 'planned'}
+                        className={
+                          active
+                            ? 'flex items-center gap-3 bg-primary-container/10 text-primary-fixed-dim border-r-4 border-primary-fixed-dim px-3 py-2 rounded-lg font-bold bg-white/5 text-left'
+                            : 'flex items-center gap-3 text-on-surface-variant px-3 py-2 rounded-lg hover:bg-white/5 hover:text-on-surface transition-all text-left'
+                        }
+                      >
+                        <span className="w-1.5 h-1.5 rounded-full shrink-0"
+                          style={{
+                            backgroundColor: active ? 'var(--color-primary-fixed-dim)' :
+                              status === 'ready' ? '#4ade80' :
+                              status === 'dev' ? '#fbbf24' : 'rgba(255,255,255,0.2)',
+                            opacity: active ? 1 : status === 'planned' ? 0.5 : 0.8,
+                          }}
+                        />
+                        <span className="font-label-numeric text-label-numeric font-mono flex-1">
+                          {MEMBER_LABELS[subtype]}
+                        </span>
+                        <span className="font-mono text-[10px] text-on-surface-variant/60">{subtype}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           );
         })}
       </div>

@@ -1,6 +1,4 @@
-import { useEffect, useCallback } from 'react';
-import { BeamScene } from './scene/BeamScene';
-import { ColumnScene } from './scene/ColumnScene';
+import { useEffect } from 'react';
 import { PlaceholderScene } from './scene/PlaceholderScene';
 import { ParamPanel } from './ui/ParamPanel';
 import { TopBar } from './ui/TopBar';
@@ -8,73 +6,41 @@ import { SideNav } from './ui/SideNav';
 import { ViewportHud } from './ui/ViewportHud';
 import { DataPanel } from './ui/DataPanel';
 import { useBeamStore } from './store/beamStore';
+import { useColumnStore } from './store/columnStore';
 import { useMemberStore } from './store/memberStore';
+import { MEMBER_TYPES, getMemberEntry } from './memberRegistry';
+import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
+
+const MEMBERS_WITH_UI = MEMBER_TYPES;
 
 export default function App() {
-  const setUi = useBeamStore((s) => s.setUi);
-  const undo = useBeamStore((s) => s.undo);
-  const redo = useBeamStore((s) => s.redo);
-  const setView = useBeamStore((s) => s.setView);
+  useKeyboardShortcuts();
 
+  // Responsive initial layout — apply to both stores
   useEffect(() => {
     const apply = () => {
       const w = window.innerWidth;
-      setUi({
+      const patch = {
         sideNavCollapsed: w < 1100,
         dataPanelCollapsed: w < 900,
         inspectorCollapsed: w < 760,
-      });
+      };
+      useBeamStore.getState().setUi(patch);
+      useColumnStore.getState().setUi(patch);
     };
     apply();
     window.addEventListener('resize', apply);
     return () => window.removeEventListener('resize', apply);
-  }, [setUi]);
-
-  const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    // Skip if user is typing in an input
-    const tag = (e.target as HTMLElement)?.tagName;
-    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
-
-    // Ctrl+Z / Ctrl+Shift+Z
-    if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
-      e.preventDefault();
-      e.shiftKey ? redo() : undo();
-      return;
-    }
-    // 1-4: toggle view layers
-    const viewKeys: Record<string, string> = {
-      '1': 'showConcrete', '2': 'showColumns', '3': 'showLongitudinal', '4': 'showStirrups',
-    };
-    if (viewKeys[e.key]) {
-      const k = viewKeys[e.key];
-      const current = useBeamStore.getState().view;
-      setView({ [k]: !(current as unknown as Record<string, boolean>)[k] });
-      return;
-    }
-    // [ ] toggle sidebar
-    if (e.key === '[') {
-      const ui = useBeamStore.getState().ui;
-      setUi({ sideNavCollapsed: !ui.sideNavCollapsed });
-    }
-    if (e.key === ']') {
-      const ui = useBeamStore.getState().ui;
-      setUi({ inspectorCollapsed: !ui.inspectorCollapsed });
-    }
-  }, [undo, redo, setView, setUi]);
-
-  useEffect(() => {
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleKeyDown]);
+  }, []);
 
   const activeType = useMemberStore((s) => s.activeType);
+  const hasUi = MEMBERS_WITH_UI.includes(activeType);
 
   const renderScene = () => {
-    switch (activeType) {
-      case 'KL': return <BeamScene />;
-      case 'KZ': return <ColumnScene />;
-      default: return <PlaceholderScene type={activeType} />;
-    }
+    const entry = getMemberEntry(activeType);
+    if (!entry) return <PlaceholderScene type={activeType} />;
+    const SceneComp = entry.sceneComponent;
+    return <SceneComp />;
   };
 
   return (
@@ -87,12 +53,12 @@ export default function App() {
           {/* 3D Canvas Area */}
           <div className="flex-1 rounded-xl bg-surface-container/50 backdrop-blur-[20px] border border-white/5 relative overflow-hidden flex flex-col shadow-2xl min-h-[300px]" style={{ borderColor: 'rgba(0, 218, 243, 0.1)' }}>
             {renderScene()}
-            {(activeType === 'KL') && <ViewportHud />}
+            {hasUi && <ViewportHud />}
           </div>
           {/* Lower Section: 2D View & Data Table */}
-          {(activeType === 'KL') && <DataPanel />}
+          {hasUi && <DataPanel />}
         </main>
-        {(activeType === 'KL') && <ParamPanel />}
+        {hasUi && <ParamPanel />}
       </div>
     </div>
   );
