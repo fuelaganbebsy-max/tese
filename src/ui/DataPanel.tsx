@@ -1,3 +1,4 @@
+// Force Vite re-hash (2)
 import { useMemo } from 'react';
 import { useBeamStore } from '../store/beamStore';
 import { useColumnStore } from '../store/columnStore';
@@ -6,6 +7,23 @@ import type { ColumnParams } from '../domain/kz/types';
 import { useMemberStore } from '../store/memberStore';
 import { derive } from '../domain/kl/derive';
 import { getMemberEntry } from '../memberRegistry';
+
+function SectionCutButton() {
+  const show = useBeamStore((s) => s.view.showSectionCut);
+  const setView = useBeamStore((s) => s.setView);
+  return (
+    <label className="relative inline-flex items-center cursor-pointer gap-2" title="在3D模型中显示剖切面">
+      <input
+        type="checkbox"
+        checked={!!show}
+        onChange={() => setView({ showSectionCut: !show })}
+        className="sr-only peer"
+      />
+      <div className="w-8 h-4 bg-surface-container-highest rounded-full peer peer-checked:bg-primary-fixed-dim/60 after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:after:translate-x-4" />
+      <span className="text-[10px] text-on-surface-variant font-mono">{show ? '剖面' : '剖面'}</span>
+    </label>
+  );
+}
 
 /* ---------- Column Section View ---------- */
 
@@ -32,7 +50,7 @@ function ColumnSectionView() {
         <h3 className="font-body-md text-body-md font-medium text-on-surface font-bold">
           剖切面 <span className="text-on-surface-variant text-[11px] ml-1">(Section A-A)</span>
         </h3>
-        <span className="material-symbols-outlined text-on-surface-variant text-[16px]">crop</span>
+        <SectionCutButton />
       </div>
       <div className="flex-1 p-4 flex items-center justify-center relative bg-surface-container-lowest">
         <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`}>
@@ -44,6 +62,24 @@ function ColumnSectionView() {
           {[0.25, 0.5, 0.75].map((f) => (
             <line key={`v${f}`} x1={innerPad + f * (W - innerPad * 2)} y1={innerPad} x2={innerPad + f * (W - innerPad * 2)} y2={H - innerPad} stroke="rgba(59,73,76,0.3)" strokeWidth={0.5} />
           ))}
+          {/* Stirrup outer hoop */}
+          <rect x={x0} y={y0} width={x1 - x0} height={y1 - y0} fill="none" stroke="#666" strokeWidth={2} />
+          {/* 135° stirrup hook at top-right corner (22G101-1 p2-7) - V4_FINAL */}
+          <path d={`M ${x1} ${y0} l 10 0 l 5 -5`} stroke="#666" strokeWidth={2} fill="none" strokeLinejoin="round" />
+          {/* Internal cross-ties */}
+          {params.stirrup.legs === 4 && (
+            <>
+              <line x1={(x0 + x1) / 2} y1={y0} x2={(x0 + x1) / 2} y2={y1} stroke="#666" strokeWidth={1.5} />
+              <line x1={x0} y1={(y0 + y1) / 2} x2={x1} y2={(y0 + y1) / 2} stroke="#666" strokeWidth={1.5} />
+            </>
+          )}
+          {params.stirrup.legs === 6 && (
+            <>
+              <line x1={x0 + (x1 - x0) / 3} y1={y0} x2={x0 + (x1 - x0) / 3} y2={y1} stroke="#666" strokeWidth={1.5} />
+              <line x1={x0 + 2 * (x1 - x0) / 3} y1={y0} x2={x0 + 2 * (x1 - x0) / 3} y2={y1} stroke="#666" strokeWidth={1.5} />
+              <line x1={x0} y1={(y0 + y1) / 2} x2={x1} y2={(y0 + y1) / 2} stroke="#666" strokeWidth={1.5} />
+            </>
+          )}
           {/* Rebar dots */}
           {derived.barPositions.map((pos, i) => {
             const cx = innerPad + (pos.x + params.b / 2) * scale;
@@ -211,29 +247,123 @@ function buildRows(params: ReturnType<typeof useBeamStore.getState>['params'], d
   return rows;
 }
 
+// v4 -- beam section per 22G101-1 p2-41, dynamic based on cut position
 function SectionView() {
   const params = useBeamStore((s) => s.params);
+  const view = useBeamStore((s) => s.view);
+  const d = useMemo(() => derive(params), [params]);
+
+  // 剖切位置 (0~1 → 实际 X)
+  const xCut = (view.sectionCutX ?? 0.5) * d.totalLength;
+
+  // 找到剖切位置所在的跨
+  let spanIdx = 0;
+  for (let i = 0; i < d.spans.length; i++) {
+    const ds = d.spans[i];
+    if (xCut >= ds.x0 - params.spans[i].hcLeft && xCut <= ds.x1 + params.spans[i].hcRight) {
+      spanIdx = i;
+      break;
+    }
+    if (i === d.spans.length - 1) spanIdx = i;
+  }
+  const sp = params.spans[spanIdx];
+  const ds = d.spans[spanIdx];
+  const tt = params.topThrough;
+
+  // 判断剖切位置处各类钢筋是否存在
+  const inSpan = xCut >= ds.x0 && xCut <= ds.x1;
+  const distFromLeft = xCut - ds.x0;
+  const distFromRight = ds.x1 - xCut;
+
+  // 上部支座负筋：左支座负筋延伸 ln/3 从左边界, 右支座负筋延伸 ln/3 从右边界
+  const ext = d.topSupportExtend[spanIdx];
+  const hasTopLeft = distFromLeft <= ext.left;
+  const hasTopRight = distFromRight <= ext.right;
+  const topLeftCount = hasTopLeft ? (sp.topLeftSupport?.count ?? 0) : 0;
+  const topRightCount = hasTopRight ? (sp.topRightSupport?.count ?? 0) : 0;
+  // 总上部钢筋 = 贯通筋 + 支座负筋（去重：取最大值，因为贯通筋已占位）
+  const topTotalCount = tt.count + Math.max(topLeftCount, topRightCount);
+
+  // 下部一排：在跨内始终存在
+  const botCount = inSpan ? sp.bottom.count : 0;
+
+  // 下部二排
+  const row2 = sp.bottomRow2;
+  let row2Count = 0;
+  if (row2 && row2.count > 0 && inSpan) {
+    if (sp.bottomRow2MidAnchor) {
+      // 全部伸入支座 → 全跨存在
+      row2Count = row2.count;
+    } else {
+      // 角筋全跨, 中间筋仅在 0.1ln ~ 0.9ln
+      const cornerCount = Math.min(2, row2.count);
+      const midCount = row2.count - cornerCount;
+      const shrink = 0.1 * sp.ln;
+      const midPresent = distFromLeft >= shrink && distFromRight >= shrink;
+      row2Count = cornerCount + (midPresent ? midCount : 0);
+    }
+  }
+
+  // SVG 绘图参数
   const W = 200;
   const aspect = params.h / params.b;
-  const H = Math.min(W * aspect, 240);
+  const H = Math.min(W * aspect, 280);
   const innerPad = 14;
-  const c = params.cover * (W - innerPad * 2) / params.b;
-  const tt = params.topThrough;
-  const sp = params.spans[0];
-  const dia = tt.diameter * (W - innerPad * 2) / params.b;
-  const dBot = sp.bottom.diameter * (W - innerPad * 2) / params.b;
+  const scale = (W - innerPad * 2) / params.b;
+  const c = params.cover * scale;
+  const stirDia = sp.stirrup.diameter * scale;
+  const dTop = tt.diameter * scale;
+  const dBot = sp.bottom.diameter * scale;
 
-  const x0 = innerPad + c;
-  const x1 = W - innerPad - c;
-  const y0 = innerPad + c;
-  const y1 = H - innerPad - c;
+  // 箍筋内框边界
+  const sx0 = innerPad + c + stirDia / 2;
+  const sx1 = W - innerPad - c - stirDia / 2;
+  const sy0 = innerPad + c + stirDia / 2;
+  const sy1 = H - innerPad - c - stirDia / 2;
 
-  const topXs = Array.from({ length: tt.count }, (_, i) =>
-    tt.count === 1 ? (x0 + x1) / 2 : x0 + (i * (x1 - x0)) / (tt.count - 1)
+  const barOff = Math.max(dTop / 2, 3) + 1;
+  const topY = sy0 + barOff;
+  const botY = sy1 - barOff;
+
+  // 上部钢筋 X 坐标
+  const topXs = Array.from({ length: topTotalCount }, (_, i) =>
+    topTotalCount === 1 ? (sx0 + sx1) / 2 : sx0 + barOff + (i * (sx1 - sx0 - 2 * barOff)) / (topTotalCount - 1)
   );
-  const botXs = Array.from({ length: sp.bottom.count }, (_, i) =>
-    sp.bottom.count === 1 ? (x0 + x1) / 2 : x0 + (i * (x1 - x0)) / (sp.bottom.count - 1)
+  // 下部一排 X 坐标
+  const botXs = Array.from({ length: botCount }, (_, i) =>
+    botCount === 1 ? (sx0 + sx1) / 2 : sx0 + barOff + (i * (sx1 - sx0 - 2 * barOff)) / (botCount - 1)
   );
+  // 下部二排
+  const dBot2 = row2 ? row2.diameter * scale : 0;
+  const clearGap = Math.max(25, sp.bottom.diameter) * scale;
+  const botY2 = botY - dBot / 2 - clearGap - dBot2 / 2;
+  const botXs2 = Array.from({ length: row2Count }, (_, i) =>
+    row2Count === 1 ? (sx0 + sx1) / 2 : sx0 + barOff + (i * (sx1 - sx0 - 2 * barOff)) / (row2Count - 1)
+  );
+
+  // 中部钢筋（构造筋/扭筋）— 根据参数面板开关显示
+  const midEnabled = sp.midBarEnabled && inSpan;
+  const midType = sp.midBarType ?? 'construction';
+  const midBundle = midType === 'torsion'
+    ? (sp.midTorsionBar ?? { grade: 'HRB400', diameter: 14, count: 2 })
+    : (sp.midConstructionBar ?? { grade: 'HRB400', diameter: 12, count: 2 });
+  const midCount = midEnabled ? midBundle.count : 0;
+  const midDia = midBundle.diameter * scale;
+  const midColor = midType === 'torsion' ? '#26c6da' : '#66bb6a';
+  // y 均匀分布在上下主筋之间
+  const midYs: number[] = [];
+  if (midCount > 0) {
+    const mYStart = topY + barOff + 2;
+    const mYEnd = (row2Count > 0 ? botY2 : botY) - barOff - 2;
+    for (let i = 0; i < midCount; i++) {
+      midYs.push(midCount === 1
+        ? (mYStart + mYEnd) / 2
+        : mYStart + i * (mYEnd - mYStart) / (midCount - 1));
+    }
+  }
+
+  // 标注：区分贯通筋和支座筋
+  const throughEnd = tt.count;
 
   return (
     <div className="w-1/3 rounded-xl bg-surface-container/80 backdrop-blur-[20px] border border-white/5 flex flex-col overflow-hidden">
@@ -241,28 +371,59 @@ function SectionView() {
         <h3 className="font-body-md text-body-md font-medium text-on-surface font-bold">
           剖切面 <span className="text-on-surface-variant text-[11px] ml-1">(Section A-A)</span>
         </h3>
-        <span className="material-symbols-outlined text-on-surface-variant text-[16px]">crop</span>
+        <SectionCutButton />
       </div>
-      <div className="flex-1 p-4 flex items-center justify-center relative bg-surface-container-lowest">
+      <div className="flex-1 p-4 flex flex-col items-center justify-center relative bg-surface-container-lowest gap-2">
         <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`}>
-          <rect x={innerPad} y={innerPad} width={W - innerPad * 2} height={H - innerPad * 2} fill="none" stroke="rgba(59,73,76,0.5)" strokeWidth={2} />
-          {/* grid lines */}
-          {[0.25, 0.5, 0.75].map((f) => (
-            <line key={`h${f}`} x1={innerPad} y1={innerPad + f * (H - innerPad * 2)} x2={W - innerPad} y2={innerPad + f * (H - innerPad * 2)} stroke="rgba(59,73,76,0.3)" strokeWidth={0.5} />
+          <defs>
+            <filter id="glow">
+              <feGaussianBlur stdDeviation="1.5" result="blur" />
+              <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+            </filter>
+          </defs>
+          {/* 混凝土截面轮廓 */}
+          <rect x={innerPad} y={innerPad} width={W - innerPad * 2} height={H - innerPad * 2} fill="rgba(59,73,76,0.1)" stroke="rgba(59,73,76,0.6)" strokeWidth={2} />
+
+          {/* 箍筋 — 封闭矩形 (加粗) + 左上角135°弯钩 (22G101-1 p2-39) */}
+          <rect x={sx0} y={sy0} width={sx1 - sx0} height={sy1 - sy0} fill="none" stroke="#78909c" strokeWidth={2.5} rx={3} />
+          {/* 左上角弯钩: 两根钩尾从顶边和左边向内斜伸 */}
+          <path d={`M ${sx0 + 8} ${sy0} l 6 6`} stroke="#78909c" strokeWidth={2.5} fill="none" strokeLinecap="round" />
+          <path d={`M ${sx0} ${sy0 + 8} l 6 6`} stroke="#78909c" strokeWidth={2.5} fill="none" strokeLinecap="round" />
+
+          {/* 箍筋内肢 */}
+          {sp.stirrup.legs === 4 && (
+            <line x1={(sx0 + sx1) / 2} y1={sy0} x2={(sx0 + sx1) / 2} y2={sy1} stroke="#78909c" strokeWidth={1.5} />
+          )}
+
+
+          {/* 中部钢筋（构造筋绿色/扭筋青色, 两侧各count根） */}
+          {midYs.map((my, i) => (
+            <g key={`mid${i}`}>
+              <circle cx={sx0 + barOff} cy={my} r={Math.max(midDia / 2, 2.5)} fill={midColor} filter="url(#glow)" />
+              <circle cx={sx1 - barOff} cy={my} r={Math.max(midDia / 2, 2.5)} fill={midColor} filter="url(#glow)" />
+            </g>
           ))}
-          {[0.25, 0.5, 0.75].map((f) => (
-            <line key={`v${f}`} x1={innerPad + f * (W - innerPad * 2)} y1={innerPad} x2={innerPad + f * (W - innerPad * 2)} y2={H - innerPad} stroke="rgba(59,73,76,0.3)" strokeWidth={0.5} />
-          ))}
-          {/* Rebar dots */}
+
+          {/* 上部钢筋 (贯通筋红色, 支座负筋紫色) */}
           {topXs.map((cx, i) => (
-            <circle key={`t${i}`} cx={cx} cy={y0} r={Math.max(dia / 2, 3)} fill="#00daf3" filter="drop-shadow(0 0 4px rgba(0,218,243,0.6))" />
+            <circle key={`t${i}`} cx={cx} cy={topY} r={Math.max(dTop / 2, 3)}
+              fill={i < throughEnd ? '#ef5350' : '#ab47bc'} filter="url(#glow)" />
           ))}
+
+          {/* 下部一排钢筋 (橙色) */}
           {botXs.map((cx, i) => (
-            <circle key={`b${i}`} cx={cx} cy={y1} r={Math.max(dBot / 2, 3)} fill="#00daf3" />
+            <circle key={`b${i}`} cx={cx} cy={botY} r={Math.max(dBot / 2, 3)} fill="#ffa726" filter="url(#glow)" />
           ))}
-          {/* Side bars */}
-          <circle cx={x0} cy={(y0 + y1) / 2} r={2.5} fill="none" stroke="#00daf3" strokeWidth={1} />
-          <circle cx={x1} cy={(y0 + y1) / 2} r={2.5} fill="none" stroke="#00daf3" strokeWidth={1} />
+
+          {/* 下部二排钢筋 */}
+          {botXs2.map((cx, i) => {
+            const isCorner = i === 0 || i === botXs2.length - 1;
+            return (
+              <circle key={`b2-${i}`} cx={cx} cy={botY2} r={Math.max(dBot2 / 2, 2.5)}
+                fill={isCorner ? '#42a5f5' : '#66bb6a'} filter="url(#glow)" />
+            );
+          })}
+
         </svg>
       </div>
     </div>
@@ -354,8 +515,8 @@ function QuantitiesTable() {
 export function BeamDataContent() {
   return (
     <>
-      <SectionView />
       <QuantitiesTable />
+      <SectionView />
     </>
   );
 }
@@ -363,8 +524,8 @@ export function BeamDataContent() {
 export function ColumnDataContent() {
   return (
     <>
-      <ColumnSectionView />
       <ColumnQuantitiesTable />
+      <ColumnSectionView />
     </>
   );
 }
@@ -381,8 +542,8 @@ export function DataPanel() {
 
   return (
     <div
-      className={`flex shrink-0 z-20 relative transition-[height] duration-200 ${
-        collapsed ? 'h-10' : 'h-[280px]'
+      className={`flex shrink-0 z-20 relative ${
+        collapsed ? 'h-10 transition-[height] duration-200' : 'h-full'
       }`}
       style={{ gap: 16 }}
     >

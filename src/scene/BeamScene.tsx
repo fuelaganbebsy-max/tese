@@ -7,6 +7,7 @@ import { derive } from '../domain/kl/derive';
 import { Concrete } from './Concrete';
 import { Rebars } from './Rebars';
 import { Columns } from './Columns';
+import { SectionCutPlane } from './SectionCutPlane';
 
 function CameraController({ center, camDist, h }: { center: [number, number, number]; camDist: number; h: number }) {
   const { camera } = useThree();
@@ -66,6 +67,7 @@ export function BeamScene() {
         <Concrete />
         <Columns />
         <Rebars />
+        <SectionCutPlane />
       </group>
 
       <Grid

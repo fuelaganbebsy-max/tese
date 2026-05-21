@@ -29,6 +29,14 @@ export interface Span {
   topLeftSupport?: RebarBundle;
   /** 该跨右端支座负筋 */
   topRightSupport?: RebarBundle;
+  /** 中部钢筋 — 构造钢筋 (侧面纵向构造筋, hw≥450mm 时设置) */
+  midConstructionBar?: RebarBundle;
+  /** 中部钢筋 — 扭筋 (受扭纵向钢筋) */
+  midTorsionBar?: RebarBundle;
+  /** 是否启用中部钢筋 */
+  midBarEnabled?: boolean;
+  /** 中部钢筋类型: 'construction' 构造钢筋 | 'torsion' 扭筋 */
+  midBarType?: 'construction' | 'torsion';
   /** 箍筋 (跨内统一) */
   stirrup: StirrupSpec;
 }

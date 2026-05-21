@@ -1,3 +1,4 @@
+// Force Vite re-hash
 import { useEffect, useState, useCallback } from 'react';
 import { PlaceholderScene } from './scene/PlaceholderScene';
 import { ParamPanel } from './ui/ParamPanel';
@@ -93,7 +94,7 @@ export default function App() {
           {hasUi && (
             <>
               <ResizeHandle direction="vertical" onResize={handleDataResize} />
-              <div className="shrink-0 overflow-hidden" style={{ height: dataH }}>
+              <div className="shrink-0 overflow-y-auto" style={{ height: dataH }}>
                 <DataPanel />
               </div>
             </>

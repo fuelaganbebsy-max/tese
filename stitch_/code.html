@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+
+<html lang="zh-CN"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Alpha-7 钢筋核心工程</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            app: {
+              bg: '#1e1e1e',
+              panel: '#252526',
+              sidebar: '#181818',
+              header: '#1e1e1e',
+              border: '#333333',
+              accent: '#00adb5',
+              text: '#d4d4d4',
+              textMuted: '#858585',
+              input: '#3c3c3c',
+              hover: '#2a2d2e',
+              selected: '#37373d',
+              danger: '#f44336',
+              warning: '#ff9800',
+              success: '#4caf50',
+            }
+          },
+          fontSize: {
+            'xxs': '0.65rem',
+          }
+        }
+      }
+    }
+  </script>
+<style data-purpose="custom-utilities">
+    /* Custom scrollbar for better appearance in dark theme */
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #1e1e1e;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #424242;
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #4f4f4f;
+    }
+    
+    /* Input range styling */
+    input[type=range] {
+      -webkit-appearance: none;
+      width: 100%;
+      background: transparent;
+    }
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      height: 12px;
+      width: 12px;
+      border-radius: 50%;
+      background: #00adb5;
+      cursor: pointer;
+      margin-top: -4px;
+    }
+    input[type=range]::-webkit-slider-runnable-track {
+      width: 100%;
+      height: 4px;
+      cursor: pointer;
+      background: #3c3c3c;
+      border-radius: 2px;
+    }
+    
+    /* Remove number input arrows */
+    input[type=number]::-webkit-inner-spin-button, 
+    input[type=number]::-webkit-outer-spin-button { 
+      -webkit-appearance: none; 
+      margin: 0; 
+    }
+  </style>
+</head>
+<body class="bg-app-bg text-app-text h-screen overflow-hidden flex flex-col font-sans text-sm selection:bg-app-accent selection:text-white">
+<!-- BEGIN: Top Navigation Bar -->
+<header class="h-12 border-b border-app-border bg-app-header flex items-center justify-between px-4 shrink-0">
+<div class="flex items-center gap-4">
+<div class="flex items-center gap-2 text-app-accent font-bold text-lg">
+<svg class="w-6 h-6" fill="currentColor" viewbox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"></path></svg>
+        Alpha-7 钢筋核心工程
+      </div>
+<div class="relative flex items-center ml-4">
+<svg class="w-4 h-4 text-app-textMuted absolute left-2" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+<input class="bg-app-input border-app-border text-xs text-app-text pl-8 pr-2 py-1 rounded w-64 focus:outline-none focus:border-app-accent focus:ring-1 focus:ring-app-accent" placeholder="搜索参数..." type="text"/>
+</div>
+</div>
+<div class="flex items-center gap-3">
+<div class="flex items-center gap-2 text-app-textMuted">
+<button class="p-1.5 hover:bg-app-hover rounded transition-colors" title="撤销"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg></button>
+<button class="p-1.5 hover:bg-app-hover rounded transition-colors" title="重做"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M21 10h-10a8 8 0 00-8 8v2M21 10l-6 6m6-6l-6-6" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg></button>
+<div class="w-px h-4 bg-app-border mx-1"></div>
+<button class="p-1.5 hover:bg-app-hover rounded transition-colors" title="通知"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg></button>
+<button class="p-1.5 hover:bg-app-hover rounded transition-colors" title="帮助"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg></button>
+</div>
+<div class="flex items-center gap-2">
+<button class="bg-app-panel border border-app-border hover:bg-app-hover text-app-text px-3 py-1 rounded text-xs flex items-center gap-1 transition-colors">
+<svg class="w-3 h-3" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+          导入
+        </button>
+<button class="bg-app-accent hover:bg-opacity-90 text-white border border-transparent px-3 py-1 rounded text-xs flex items-center gap-1 transition-colors">
+          导出
+          <svg class="w-3 h-3" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+</button>
+<button class="ml-2 w-8 h-8 rounded-full bg-app-selected border border-app-border flex items-center justify-center text-app-textMuted hover:text-app-text transition-colors">
+<svg class="w-5 h-5" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+</button>
+</div>
+</div>
+</header>
+<!-- END: Top Navigation Bar -->
+<!-- BEGIN: Main Content Area -->
+<main class="flex-1 flex overflow-hidden">
+<!-- BEGIN: Left Sidebar -->
+<aside class="w-64 bg-app-sidebar border-r border-app-border flex flex-col shrink-0">
+<div class="p-3 border-b border-app-border flex flex-col gap-1">
+<div class="flex items-center gap-2 text-sm font-semibold">
+<div class="w-6 h-6 bg-app-accent bg-opacity-20 rounded flex items-center justify-center text-app-accent">
+<svg class="w-4 h-4" fill="currentColor" viewbox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"></path></svg>
+</div>
+<div>
+<div class="text-app-accent leading-tight">Alpha-7 钢筋工程</div>
+<div class="text-xxs text-app-textMuted leading-tight">22G101 全构件平台</div>
+</div>
+</div>
+</div>
+<div class="flex-1 overflow-y-auto py-2">
+<!-- Component Tree Navigation -->
+<nav class="flex flex-col text-xs text-app-textMuted">
+<!-- 梁 (Beams) -->
+<div class="flex flex-col">
+<button class="flex items-center justify-between px-4 py-2 hover:bg-app-hover hover:text-app-text group">
+<div class="flex items-center gap-2">
+<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M20 12H4" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+<span class="font-medium group-hover:text-white">梁</span>
+</div>
+<svg class="w-3 h-3 transform rotate-90" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M9 5l7 7-7 7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+</button>
+<div class="flex flex-col pl-4 border-l-2 border-app-accent ml-6 my-1 relative">
+<button class="flex items-center justify-between px-4 py-1.5 bg-app-selected text-white rounded-l-md ml-[-2px] relative z-10 before:content-[''] before:absolute before:left-[-2px] before:top-0 before:bottom-0 before:w-[2px] before:bg-app-accent">
+<span class="truncate">框架梁</span>
+<span class="text-xxs font-mono opacity-60">KL</span>
+</button>
+<button class="flex items-center justify-between px-4 py-1.5 hover:bg-app-hover hover:text-app-text rounded-l-md ml-[-2px] relative">
+<span class="truncate">次梁</span>
+<span class="text-xxs font-mono opacity-60">L</span>
+</button>
+<button class="flex items-center justify-between px-4 py-1.5 hover:bg-app-hover hover:text-app-text rounded-l-md ml-[-2px] relative">
+<span class="truncate">屋面框架梁</span>
+<span class="text-xxs font-mono opacity-60">WKL</span>
+</button>
+<button class="flex items-center justify-between px-4 py-1.5 hover:bg-app-hover hover:text-app-text rounded-l-md ml-[-2px] relative">
+<span class="truncate">悬挑梁</span>
+<span class="text-xxs font-mono opacity-60">XL</span>
+</button>
+</div>
+</div>
+<!-- 柱 (Columns) -->
+<button class="flex items-center justify-between px-4 py-2 hover:bg-app-hover hover:text-app-text group">
+<div class="flex items-center gap-2">
+<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M4 6h16M4 12h16m-7 6h7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+<span class="font-medium group-hover:text-white">柱</span>
+</div>
+<div class="w-1.5 h-1.5 rounded-full bg-yellow-600"></div>
+</button>
+<!-- 墙 (Walls) -->
+<button class="flex items-center justify-between px-4 py-2 hover:bg-app-hover hover:text-app-text group">
+<div class="flex items-center gap-2">
+<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+<span class="font-medium group-hover:text-white">墙</span>
+</div>
+<div class="w-1 h-1 rounded-full bg-app-textMuted"></div>
+</button>
+<!-- 板 (Slabs) -->
+<button class="flex items-center justify-between px-4 py-2 hover:bg-app-hover hover:text-app-text group">
+<div class="flex items-center gap-2">
+<svg class="w-3.5 h-3.5 transform -rotate-45" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+<span class="font-medium group-hover:text-white">板</span>
+</div>
+<div class="w-1 h-1 rounded-full bg-app-textMuted"></div>
+</button>
+<!-- 楼梯 (Stairs) -->
+<button class="flex items-center justify-between px-4 py-2 hover:bg-app-hover hover:text-app-text group">
+<div class="flex items-center gap-2">
+<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+<span class="font-medium group-hover:text-white">楼梯</span>
+</div>
+<div class="w-1 h-1 rounded-full bg-app-textMuted"></div>
+</button>
+<!-- 基础 (Foundations) -->
+<button class="flex items-center justify-between px-4 py-2 hover:bg-app-hover hover:text-app-text group">
+<div class="flex items-center gap-2">
+<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+<span class="font-medium group-hover:text-white">基础</span>
+</div>
+<div class="w-1 h-1 rounded-full bg-app-textMuted"></div>
+</button>
+</nav>
+</div>
+<!-- Bottom Sidebar Actions -->
+<div class="p-4 border-t border-app-border flex flex-col gap-2 text-xs text-app-textMuted">
+<button class="flex items-center gap-2 hover:text-app-text transition-colors w-full text-left">
+<svg class="w-4 h-4" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+          设置
+        </button>
+<button class="flex items-center gap-2 hover:text-app-text transition-colors w-full text-left">
+<svg class="w-4 h-4" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M15 19l-7-7 7-7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+          收起
+        </button>
+</div>
+</aside>
+<!-- END: Left Sidebar -->
+<!-- BEGIN: Central Workspace -->
+<div class="flex-1 flex flex-col min-w-0 bg-black relative">
+<!-- 3D Viewport Header Overlay -->
+<div class="absolute top-4 left-4 z-10 flex gap-2">
+<div class="bg-app-panel bg-opacity-80 backdrop-blur text-xs px-2 py-1 rounded border border-app-border flex items-center gap-2">
+<div class="w-1.5 h-1.5 rounded-full bg-app-accent"></div>
+<span class="text-app-text">KL-1(1) 300x600 <span class="text-app-textMuted ml-1">渲染中</span></span>
+</div>
+</div>
+<!-- 3D Viewport Controls Top Right -->
+<div class="absolute top-4 right-4 z-10 flex flex-col gap-2">
+<button class="w-8 h-8 bg-app-panel bg-opacity-80 backdrop-blur rounded border border-app-border flex items-center justify-center text-xs font-medium text-app-text hover:bg-app-hover transition-colors">TOP</button>
+<button class="w-8 h-8 bg-app-panel bg-opacity-80 backdrop-blur rounded border border-app-border flex items-center justify-center text-app-textMuted hover:text-app-text transition-colors"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg></button>
+<button class="w-8 h-8 bg-app-panel bg-opacity-80 backdrop-blur rounded border border-app-border flex items-center justify-center text-app-textMuted hover:text-app-text transition-colors"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg></button>
+<button class="w-8 h-8 bg-app-panel bg-opacity-80 backdrop-blur rounded border border-app-border flex items-center justify-center text-app-textMuted hover:text-app-text transition-colors"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M4 6h16M4 12h16m-7 6h7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg></button>
+<button class="w-8 h-8 bg-app-panel bg-opacity-80 backdrop-blur rounded border border-app-border flex items-center justify-center text-app-accent hover:bg-app-hover transition-colors"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg></button>
+</div>
+<!-- Main 3D Image Placeholder -->
+<div class="flex-1 flex items-center justify-center bg-[#1a1c1d] relative overflow-hidden">
+<!-- Using a placeholder pattern to simulate the dark grid background -->
+<div class="absolute inset-0 opacity-10" style="background-image: linear-gradient(#333 1px, transparent 1px), linear-gradient(90deg, #333 1px, transparent 1px); background-size: 100px 100px;"></div>
+<!-- The actual 3D rendering image from the datastore -->
+<img alt="3D Rebar Viewport" class="absolute max-w-[80%] max-h-[80%] object-contain drop-shadow-2xl z-0" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDXx60k8kxhis05x9tJGGHqRiINcc0UEyaB1KUjJlb7mYu2RWvPhJajjYlVlvemlLhmL9Veh4V8MD8Zrem28F7OhZaBZe42qpCiagOcGk8JKHthw32A8FEoujfvDUf2n6BtAjh2wZFDOSc9ItisQPaTxCnM91vVnMPWwPiBEAkY69orFs5e-UVhVE5EPkcLgd27ITTxnxQrXqfhkDthhBvUop772ScZN36sxw1Zmf7EdMwYooEcf4R3Lm2WxXqKPy6OxtRVW0NGbII" style="clip-path: inset(10% 10% 25% 10%); transform: scale(1.4) translateY(-5%); filter: contrast(1.1) brightness(1.1);"/>
+<!-- Bottom left info badges -->
+<div class="absolute bottom-4 left-4 z-10 flex gap-2">
+<div class="bg-app-panel bg-opacity-80 backdrop-blur text-xxs px-2 py-1 rounded border border-app-border text-app-accent">LOD: High</div>
+<div class="bg-app-panel bg-opacity-80 backdrop-blur text-xxs px-2 py-1 rounded border border-app-border text-app-textMuted">箍筋: 42</div>
+<div class="bg-app-panel bg-opacity-80 backdrop-blur text-xxs px-2 py-1 rounded border border-app-border text-app-textMuted">laE: 1000</div>
+</div>
+<!-- Viewport Axis Gizmo Simulation -->
+<div class="absolute bottom-4 right-4 z-10 flex flex-col items-end gap-1">
+<div class="relative w-16 h-16 mr-2 mb-2">
+<!-- Simulated Gizmo -->
+<div class="absolute top-1/2 left-1/2 w-8 h-0.5 bg-red-500 origin-left transform -translate-y-1/2 rounded"><span class="absolute right-0 -top-4 text-[10px] text-red-500 font-bold">X</span></div>
+<div class="absolute top-1/2 left-1/2 w-0.5 h-8 bg-green-500 origin-bottom transform -translate-x-1/2 -translate-y-full rounded"><span class="absolute top-0 -left-4 text-[10px] text-green-500 font-bold">Y</span></div>
+<div class="absolute top-1/2 left-1/2 w-0.5 h-6 bg-blue-500 origin-top transform -translate-x-1/2 rotate-45 rounded"><span class="absolute bottom-0 -left-4 text-[10px] text-blue-500 font-bold">Z</span></div>
+<div class="absolute top-1/2 left-1/2 w-2 h-2 bg-gray-400 rounded-full transform -translate-x-1/2 -translate-y-1/2"></div>
+</div>
+<div class="text-[10px] text-app-textMuted opacity-70">左键旋转 · 右键平移 · 滚轮缩放</div>
+</div>
+</div>
+<!-- BEGIN: Bottom Panels Container -->
+<div class="h-64 border-t border-app-border flex shrink-0 bg-app-panel">
+<!-- BOM Data Table (Now on the left) -->
+<div class="w-[calc(100%-20rem)] border-r border-app-border flex flex-col">
+<div class="px-4 py-2 border-b border-app-border flex justify-between items-center bg-app-header">
+<div class="flex items-center gap-2">
+<svg class="w-3.5 h-3.5 text-app-accent" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M4 6h16M4 10h16M4 14h16M4 18h16" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+<span class="text-xs font-medium text-app-text">钢筋工程量 <span class="text-app-textMuted font-normal">(BOM Data)</span></span>
+</div>
+<button class="text-xs text-app-textMuted hover:text-app-text flex items-center gap-1">
+        导出 <span class="font-mono bg-app-selected px-1 rounded">CSV</span>
+</button>
+</div>
+<div class="flex-1 overflow-auto bg-app-panel">
+<table class="w-full text-left text-xs whitespace-nowrap">
+<thead class="text-app-textMuted sticky top-0 bg-app-panel z-10 border-b border-app-border">
+<tr>
+<th class="px-4 py-2 font-normal w-24">编号</th>
+<th class="px-4 py-2 font-normal">规格</th>
+<th class="px-4 py-2 font-normal text-right">长度</th>
+<th class="px-4 py-2 font-normal text-right">数量</th>
+<th class="px-4 py-2 font-normal text-right pr-6">重量 (KG)</th>
+</tr>
+</thead>
+<tbody class="text-app-text divide-y divide-[#2d2d2d]">
+<tr class="hover:bg-app-hover">
+<td class="px-4 py-1.5 text-app-accent">T1</td>
+<td class="px-4 py-1.5"><span class="bg-[#3c3c3c] px-1.5 py-0.5 rounded text-xxs font-mono">HRB400 ∅25</span></td>
+<td class="px-4 py-1.5 text-right font-mono">9.05m</td>
+<td class="px-4 py-1.5 text-right font-mono">2</td>
+<td class="px-4 py-1.5 text-right font-mono pr-6">69.8</td>
+</tr>
+<tr class="hover:bg-app-hover">
+<td class="px-4 py-1.5 text-app-accent">B1</td>
+<td class="px-4 py-1.5"><span class="bg-[#3c3c3c] px-1.5 py-0.5 rounded text-xxs font-mono">HRB400 ∅25</span></td>
+<td class="px-4 py-1.5 text-right font-mono">8.50m</td>
+<td class="px-4 py-1.5 text-right font-mono">4</td>
+<td class="px-4 py-1.5 text-right font-mono pr-6">131.1</td>
+</tr>
+<tr class="hover:bg-app-hover">
+<td class="px-4 py-1.5 text-app-accent">N1L</td>
+<td class="px-4 py-1.5"><span class="bg-[#3c3c3c] px-1.5 py-0.5 rounded text-xxs font-mono">HRB400 ∅25</span></td>
+<td class="px-4 py-1.5 text-right font-mono">3.17m</td>
+<td class="px-4 py-1.5 text-right font-mono">2</td>
+<td class="px-4 py-1.5 text-right font-mono pr-6">24.5</td>
+</tr>
+<tr class="hover:bg-app-hover">
+<td class="px-4 py-1.5 text-app-accent">N1R</td>
+<td class="px-4 py-1.5"><span class="bg-[#3c3c3c] px-1.5 py-0.5 rounded text-xxs font-mono">HRB400 ∅25</span></td>
+<td class="px-4 py-1.5 text-right font-mono">3.17m</td>
+<td class="px-4 py-1.5 text-right font-mono">2</td>
+<td class="px-4 py-1.5 text-right font-mono pr-6">24.5</td>
+</tr>
+<tr class="hover:bg-app-hover">
+<td class="px-4 py-1.5 text-app-accent">S1</td>
+<td class="px-4 py-1.5"><span class="bg-[#3c3c3c] px-1.5 py-0.5 rounded text-xxs font-mono">HRB400 ∅10</span></td>
+<td class="px-4 py-1.5 text-right font-mono">1.99m</td>
+<td class="px-4 py-1.5 text-right font-mono">42</td>
+<td class="px-4 py-1.5 text-right font-mono pr-6">51.5</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="px-4 py-2 border-t border-app-border bg-app-header flex justify-between items-center text-xs">
+<span class="text-app-textMuted">总钢筋估重</span>
+<span class="text-app-accent font-bold font-mono">301.40 kg</span>
+</div>
+</div>
+<!-- Cross Section View (Now on the right) -->
+<div class="w-80 flex flex-col shrink-0">
+<div class="px-4 py-2 border-b border-app-border flex justify-between items-center bg-app-header">
+<span class="text-xs font-medium text-app-text">剖切面 <span class="text-app-textMuted font-normal">(Section A-A)</span></span>
+<button class="text-app-textMuted hover:text-app-text"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M12 4v16m8-8H4" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg></button>
+</div>
+<div class="flex-1 bg-[#1a1c1d] flex items-center justify-center p-4 relative overflow-hidden">
+<div class="absolute inset-0 opacity-10" style="background-image: linear-gradient(#333 1px, transparent 1px), linear-gradient(90deg, #333 1px, transparent 1px); background-size: 20px 20px;"></div>
+<div class="w-32 h-48 border-2 border-app-textMuted relative bg-app-panel bg-opacity-20 flex flex-col justify-between p-2">
+<div class="flex justify-between w-full">
+<div class="w-3 h-3 rounded-full bg-app-accent shadow-[0_0_5px_#00adb5]"></div>
+<div class="w-3 h-3 rounded-full bg-app-accent shadow-[0_0_5px_#00adb5]"></div>
+</div>
+<div class="flex justify-between w-full">
+<div class="w-1.5 h-1.5 rounded-full border border-app-accent ml-0.5"></div>
+<div class="w-1.5 h-1.5 rounded-full border border-app-accent mr-0.5"></div>
+</div>
+<div class="flex justify-between w-full">
+<div class="w-1.5 h-1.5 rounded-full border border-app-accent ml-0.5"></div>
+<div class="w-1.5 h-1.5 rounded-full border border-app-accent mr-0.5"></div>
+</div>
+<div class="flex justify-between w-full">
+<div class="w-3 h-3 rounded-full bg-app-accent shadow-[0_0_5px_#00adb5]"></div>
+<div class="w-3 h-3 rounded-full bg-app-accent shadow-[0_0_5px_#00adb5]"></div>
+<div class="w-3 h-3 rounded-full bg-app-accent shadow-[0_0_5px_#00adb5]"></div>
+<div class="w-3 h-3 rounded-full bg-app-accent shadow-[0_0_5px_#00adb5]"></div>
+</div>
+<div class="absolute inset-1 border border-pink-500 rounded-sm opacity-80 pointer-events-none"></div>
+<div class="absolute inset-2 border border-yellow-500 rounded-sm opacity-60 pointer-events-none w-1/2 left-1/2 transform -translate-x-1/2"></div>
+</div>
+</div>
+</div>
+</div>
+<!-- END: Bottom Panels Container -->
+</div>
+<!-- END: Central Workspace -->
+<!-- BEGIN: Right Properties Panel -->
+<aside class="w-80 bg-app-panel border-l border-app-border flex flex-col shrink-0">
+<!-- Panel Tabs -->
+<div class="flex border-b border-app-border bg-app-header shrink-0">
+<button class="flex-1 py-3 text-sm font-medium text-app-accent border-b-2 border-app-accent flex flex-col items-center gap-1 bg-app-panel">
+<svg class="w-4 h-4" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+          参数
+        </button>
+<button class="flex-1 py-3 text-sm font-medium text-app-textMuted hover:text-app-text flex flex-col items-center gap-1 transition-colors">
+<svg class="w-4 h-4" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+          AI 助手
+        </button>
+</div>
+<!-- Properties Scroll Area -->
+<div class="flex-1 overflow-y-auto p-4 space-y-6">
+<!-- Section: Geometry Dimensions -->
+<div class="space-y-4">
+<div class="flex items-center justify-between text-xs">
+<label class="text-app-text">高度 (Height) <span class="text-app-textMuted italic">h</span></label>
+<div class="flex items-center gap-2">
+<span class="text-app-accent font-mono">600</span>
+<span class="text-app-textMuted">mm</span>
+</div>
+</div>
+<input class="w-full" max="1200" min="300" type="range" value="600"/>
+<div class="flex items-center justify-between text-xs pt-2">
+<label class="text-app-text">梁前边距柱前边</label>
+<div class="flex items-center gap-2">
+<input class="w-12 bg-app-input border border-app-border rounded px-1 py-0.5 text-right font-mono text-app-text focus:outline-none focus:border-app-accent" type="number" value="150"/>
+<span class="text-app-textMuted">mm</span>
+</div>
+</div>
+<input class="w-full" max="300" min="0" type="range" value="150"/>
+<div class="flex gap-2 text-xs">
+<button class="flex-1 py-1.5 bg-app-input border border-app-border rounded text-app-textMuted hover:text-app-text">齐平 (0)</button>
+<button class="flex-1 py-1.5 bg-[#00adb5] bg-opacity-20 border border-app-accent rounded text-app-accent font-medium">居中 (150)</button>
+<button class="flex-1 py-1.5 bg-app-input border border-app-border rounded text-app-textMuted hover:text-app-text">反齐 (300)</button>
+</div>
+</div>
+<!-- Section: Material Properties -->
+<div class="space-y-3">
+<h3 class="text-xs font-bold text-app-text mb-2">材质</h3>
+<div class="grid grid-cols-2 gap-3 text-xs">
+<div>
+<label class="block text-app-textMuted mb-1">混凝土 (Concrete)</label>
+<select class="w-full bg-app-input border border-app-border rounded px-2 py-1.5 text-app-text focus:outline-none focus:border-app-accent appearance-none">
+<option>C30</option>
+<option>C35</option>
+<option>C40</option>
+</select>
+</div>
+<div>
+<label class="block text-app-textMuted mb-1">主筋 (Main Rebar)</label>
+<select class="w-full bg-app-input border border-app-border rounded px-2 py-1.5 text-app-text focus:outline-none focus:border-app-accent appearance-none">
+<option>HRB400</option>
+<option>HRB500</option>
+</select>
+</div>
+</div>
+<div class="text-xs">
+<label class="block text-app-textMuted mb-1">抗震等级</label>
+<select class="w-full bg-app-input border border-app-border rounded px-2 py-1.5 text-app-text focus:outline-none focus:border-app-accent appearance-none">
+<option>抗震一级 (等级 I)</option>
+<option>抗震二级 (等级 II)</option>
+<option>非抗震</option>
+</select>
+</div>
+<div class="text-xs">
+<label class="block text-app-textMuted mb-1">保护层厚度 <span class="italic">c</span></label>
+<div class="relative">
+<select class="w-full bg-app-input border border-app-border rounded px-2 py-1.5 text-app-text focus:outline-none focus:border-app-accent appearance-none">
+<option>25 mm</option>
+<option>30 mm</option>
+<option>35 mm</option>
+</select>
+<div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-app-textMuted">
+<svg class="w-3 h-3" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+</div>
+</div>
+</div>
+</div>
+<div class="h-px bg-app-border my-4"></div>
+<!-- Section: Span List -->
+<div class="space-y-4">
+<div class="flex items-center justify-between">
+<h3 class="text-xs font-bold text-app-text">跨列表 · 共 1 跨</h3>
+<div class="flex gap-1">
+<button class="w-5 h-5 bg-app-input border border-app-border rounded flex items-center justify-center text-app-text hover:bg-app-hover">+</button>
+<button class="w-5 h-5 bg-app-input border border-app-border rounded flex items-center justify-center text-app-text hover:bg-app-hover">-</button>
+</div>
+</div>
+<!-- Current Span Info -->
+<div class="bg-app-input border border-app-border rounded p-2 text-xs">
+<div class="flex justify-between items-center mb-2 pb-2 border-b border-app-border border-opacity-50 text-app-textMuted">
+<span class="text-app-accent font-medium">第 1 / 1 跨</span>
+<span class="font-mono text-[10px]">ln = 6000mm</span>
+</div>
+<div class="grid grid-cols-3 gap-2">
+<div>
+<label class="block text-app-textMuted mb-1 text-[10px]">净跨 ln</label>
+<div class="flex items-center bg-app-panel rounded border border-app-border px-1">
+<input class="w-full bg-transparent text-right font-mono focus:outline-none py-1" type="text" value="6000"/>
+<span class="text-[9px] text-app-textMuted ml-1">mm</span>
+</div>
+</div>
+<div>
+<label class="block text-app-textMuted mb-1 text-[10px]">左支座 hc</label>
+<div class="flex items-center bg-app-panel rounded border border-app-border px-1">
+<input class="w-full bg-transparent text-right font-mono focus:outline-none py-1" type="text" value="600"/>
+<span class="text-[9px] text-app-textMuted ml-1">mm</span>
+</div>
+</div>
+<div>
+<label class="block text-app-textMuted mb-1 text-[10px]">右支座 hc</label>
+<div class="flex items-center bg-app-panel rounded border border-app-border px-1">
+<input class="w-full bg-transparent text-right font-mono focus:outline-none py-1" type="text" value="600"/>
+<span class="text-[9px] text-app-textMuted ml-1">mm</span>
+</div>
+</div>
+</div>
+</div>
+<!-- SUB-SECTION: Top Rebar (上部钢筋) -->
+<div class="space-y-3">
+<div class="flex items-center gap-1.5 mb-1">
+<div class="w-1.5 h-1.5 rounded-full bg-app-danger"></div>
+<h4 class="text-xs font-bold text-app-text">上部钢筋</h4>
+</div><div class="bg-app-selected bg-opacity-30 border border-app-border rounded p-2 text-xs relative group mb-3">
+<div class="absolute inset-y-0 left-0 w-0.5 bg-app-danger rounded-l"></div>
+<div class="flex justify-between items-center mb-1 pl-1">
+<span class="text-app-textMuted">上部贯通筋</span>
+<span class="text-[10px] text-app-accent font-mono">2∅25 HRB400</span>
+</div>
+<div class="flex gap-1 pl-1">
+<select class="w-20 bg-app-input border border-app-border rounded px-1.5 py-1 focus:outline-none appearance-none font-mono text-[10px]">
+<option>HRB400</option>
+</select>
+<select class="w-16 bg-app-input border border-app-border rounded px-1.5 py-1 focus:outline-none appearance-none font-mono text-[10px]">
+<option>∅25</option>
+</select>
+<input class="flex-1 min-w-0 bg-app-input border border-app-border rounded px-2 py-1 text-center focus:outline-none font-mono text-[10px]" type="number" value="2"/>
+</div>
+</div>
+<!-- MOVED MODULE: Top Longitudinal Reinforcement (上部贯通筋) -->
+<!-- This section was moved from the top level into the "Top Rebar" section as requested -->
+<!-- END MOVED MODULE -->
+<div class="bg-[#2d2d2d] rounded p-2 text-xs">
+<div class="flex justify-between items-center mb-1">
+<span class="text-app-textMuted">左支座负筋</span>
+<span class="text-[10px] text-app-accent font-mono">2∅25 HRB400</span>
+</div>
+<div class="flex gap-1">
+<select class="w-20 bg-app-input border border-app-border rounded px-1.5 py-1 focus:outline-none appearance-none font-mono text-[10px]">
+<option>HRB400</option>
+</select>
+<select class="w-16 bg-app-input border border-app-border rounded px-1.5 py-1 focus:outline-none appearance-none font-mono text-[10px]">
+<option>∅25</option>
+</select>
+<input class="flex-1 min-w-0 bg-app-input border border-app-border rounded px-2 py-1 text-center focus:outline-none font-mono text-[10px]" type="number" value="2"/>
+</div>
+</div>
+<div class="bg-[#2d2d2d] rounded p-2 text-xs">
+<div class="flex justify-between items-center mb-1">
+<span class="text-app-textMuted">右支座负筋</span>
+<span class="text-[10px] text-app-accent font-mono">2∅25 HRB400</span>
+</div>
+<div class="flex gap-1">
+<select class="w-20 bg-app-input border border-app-border rounded px-1.5 py-1 focus:outline-none appearance-none font-mono text-[10px]">
+<option>HRB400</option>
+</select>
+<select class="w-16 bg-app-input border border-app-border rounded px-1.5 py-1 focus:outline-none appearance-none font-mono text-[10px]">
+<option>∅25</option>
+</select>
+<input class="flex-1 min-w-0 bg-app-input border border-app-border rounded px-2 py-1 text-center focus:outline-none font-mono text-[10px]" type="number" value="2"/>
+</div>
+</div>
+</div>
+<!-- SUB-SECTION: Bottom Rebar (下部钢筋) -->
+<div class="space-y-3 pt-2">
+<div class="flex items-center gap-1.5 mb-1">
+<div class="w-1.5 h-1.5 rounded-full bg-yellow-500"></div>
+<h4 class="text-xs font-bold text-app-text">下部钢筋</h4>
+</div><div class="bg-app-selected bg-opacity-30 border border-app-border rounded p-2 text-xs relative group mb-3">
+<div class="absolute inset-y-0 left-0 w-0.5 bg-app-danger rounded-l"></div>
+<div class="flex justify-between items-center mb-1 pl-1">
+<span class="text-app-textMuted">上部贯通筋</span>
+<span class="text-[10px] text-app-accent font-mono">2∅25 HRB400</span>
+</div>
+<div class="flex gap-1 pl-1">
+<select class="w-20 bg-app-input border border-app-border rounded px-1.5 py-1 focus:outline-none appearance-none font-mono text-[10px]">
+<option>HRB400</option>
+</select>
+<select class="w-16 bg-app-input border border-app-border rounded px-1.5 py-1 focus:outline-none appearance-none font-mono text-[10px]">
+<option>∅25</option>
+</select>
+<input class="flex-1 min-w-0 bg-app-input border border-app-border rounded px-2 py-1 text-center focus:outline-none font-mono text-[10px]" type="number" value="2"/>
+</div>
+</div>
+<div class="bg-[#2d2d2d] rounded p-2 text-xs">
+<div class="flex justify-between items-center mb-1">
+<span class="text-app-textMuted">下部一排纵筋</span>
+<span class="text-[10px] text-app-accent font-mono">4∅25 HRB400</span>
+</div>
+<div class="flex gap-1">
+<select class="w-20 bg-app-input border border-app-border rounded px-1.5 py-1 focus:outline-none appearance-none font-mono text-[10px]">
+<option>HRB400</option>
+</select>
+<select class="w-16 bg-app-input border border-app-border rounded px-1.5 py-1 focus:outline-none appearance-none font-mono text-[10px]">
+<option>∅25</option>
+</select>
+<input class="flex-1 min-w-0 bg-app-input border border-app-border rounded px-2 py-1 text-center focus:outline-none font-mono text-[10px]" type="number" value="4"/>
+</div>
+<div class="text-[10px] text-app-textMuted mt-1.5">单排最大 5 根</div>
+</div>
+</div>
+<!-- SUB-SECTION: Stirrups (箍筋) -->
+<div class="space-y-3 pt-2">
+<div class="flex items-center gap-1.5 mb-1">
+<div class="w-3.5 h-3.5 flex flex-col justify-between">
+<div class="w-full h-px bg-white"></div>
+<div class="w-full h-px bg-white"></div>
+<div class="w-full h-px bg-white"></div>
+</div>
+<h4 class="text-xs font-bold text-app-text">箍筋</h4>
+</div><div class="bg-app-selected bg-opacity-30 border border-app-border rounded p-2 text-xs relative group mb-3">
+<div class="absolute inset-y-0 left-0 w-0.5 bg-app-danger rounded-l"></div>
+<div class="flex justify-between items-center mb-1 pl-1">
+<span class="text-app-textMuted">上部贯通筋</span>
+<span class="text-[10px] text-app-accent font-mono">2∅25 HRB400</span>
+</div>
+<div class="flex gap-1 pl-1">
+<select class="w-20 bg-app-input border border-app-border rounded px-1.5 py-1 focus:outline-none appearance-none font-mono text-[10px]">
+<option>HRB400</option>
+</select>
+<select class="w-16 bg-app-input border border-app-border rounded px-1.5 py-1 focus:outline-none appearance-none font-mono text-[10px]">
+<option>∅25</option>
+</select>
+<input class="flex-1 min-w-0 bg-app-input border border-app-border rounded px-2 py-1 text-center focus:outline-none font-mono text-[10px]" type="number" value="2"/>
+</div>
+</div>
+<div class="bg-[#2d2d2d] rounded p-2 text-xs">
+<div class="flex justify-between items-center mb-1">
+<span class="text-app-textMuted">规格 (等级 / 直径 / 肢数)</span>
+<span class="text-[10px] text-app-accent font-mono">2∅10 HRB400</span>
+</div>
+<div class="flex gap-1 mb-2">
+<select class="w-20 bg-app-input border border-app-border rounded px-1.5 py-1 focus:outline-none appearance-none font-mono text-[10px]">
+<option>HRB400</option>
+</select>
+<select class="w-16 bg-app-input border border-app-border rounded px-1.5 py-1 focus:outline-none appearance-none font-mono text-[10px]">
+<option>∅10</option>
+</select>
+<input class="flex-1 min-w-0 bg-app-input border border-app-border rounded px-2 py-1 text-center focus:outline-none font-mono text-[10px]" type="number" value="2"/>
+</div>
+<div class="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-[#444]">
+<div>
+<label class="block text-app-textMuted mb-1 text-[10px]">加密间距</label>
+<div class="flex items-center bg-app-input rounded border border-app-border px-1">
+<input class="w-full bg-transparent text-right font-mono focus:outline-none py-1" type="text" value="100"/>
+<span class="text-[9px] text-app-textMuted ml-1">mm</span>
+</div>
+</div>
+<div>
+<label class="block text-app-textMuted mb-1 text-[10px]">非加密间距</label>
+<div class="flex items-center bg-app-input rounded border border-app-border px-1">
+<input class="w-full bg-transparent text-right font-mono focus:outline-none py-1" type="text" value="200"/>
+<span class="text-[9px] text-app-textMuted ml-1">mm</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Panel Footer Action -->
+<div class="p-3 border-t border-app-border bg-app-header shrink-0 flex justify-center">
+<button class="flex items-center gap-2 text-xs text-app-textMuted hover:text-app-text transition-colors">
+<svg class="w-4 h-4" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+          诊断 Diagnostics
+        </button>
+</div>
+</aside>
+<!-- END: Right Properties Panel -->
+</main>
+<!-- END: Main Content Area -->
+</body></html>

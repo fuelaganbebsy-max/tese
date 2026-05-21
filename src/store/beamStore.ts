@@ -10,6 +10,8 @@ interface ViewState {
   showLongitudinal: boolean;
   showAnnotations: boolean;
   showColumns: boolean;
+  showSectionCut: boolean;
+  sectionCutX: number;
 }
 
 interface UiState {
@@ -43,7 +45,7 @@ interface BeamStore {
 export const useBeamStore = create<BeamStore>()(persist(
   (set, get) => ({
   params: defaultBeam(),
-  view: { showConcrete: true, showStirrups: true, showLongitudinal: true, showAnnotations: true, showColumns: true },
+  view: { showConcrete: true, showStirrups: true, showLongitudinal: true, showAnnotations: true, showColumns: true, showSectionCut: false, sectionCutX: 0.5 },
   ui: { sideNavCollapsed: false, inspectorCollapsed: false, dataPanelCollapsed: false },
   cameraCommand: null,
   _history: [],
@@ -88,7 +90,7 @@ export const useBeamStore = create<BeamStore>()(persist(
 }),
   {
     name: 'rebar-3d-beam',
-    version: 6,
+    version: 7,
     partialize: (state) => ({ params: state.params, view: state.view }),
     migrate: (persisted: any) => {
       try {
@@ -104,6 +106,11 @@ export const useBeamStore = create<BeamStore>()(persist(
           if (!p.horizontalHaunchRight) p.horizontalHaunchRight = { enabled: false, depth: 100, length: 600 };
           if (!p.horizontalHaunchFront) p.horizontalHaunchFront = { enabled: false, depth: 100, length: 600 };
           if (!p.horizontalHaunchBack) p.horizontalHaunchBack = { enabled: false, depth: 100, length: 600 };
+        }
+        // v6→v7: add showSectionCut / sectionCutX to view
+        if (persisted && persisted.view) {
+          if (persisted.view.showSectionCut == null) persisted.view.showSectionCut = false;
+          if (persisted.view.sectionCutX == null) persisted.view.sectionCutX = 0.5;
         }
         return persisted;
       } catch {

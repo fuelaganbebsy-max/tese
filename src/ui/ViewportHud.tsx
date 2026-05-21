@@ -73,9 +73,9 @@ export function ViewportHud() {
             <button
               key={k}
               title={label}
-              onClick={() => setView({ [k]: !view[k] } as any)}
+              onClick={() => setView({ [k]: !(view as any)[k] } as any)}
               className={`w-8 h-8 rounded-DEFAULT backdrop-blur-md border border-white/10 flex items-center justify-center transition-colors ${
-                view[k]
+                (view as any)[k]
                   ? 'bg-primary-fixed-dim/20 text-primary-fixed-dim'
                   : 'bg-surface-container-highest/80 text-on-surface-variant hover:text-primary-fixed-dim'
               }`}
@@ -85,6 +85,20 @@ export function ViewportHud() {
           ))}
         </div>
       </div>
+
+      {/* Section Cut Slider - horizontal at bottom of 3D viewport */}
+      {isBeam && beamView.showSectionCut && (
+        <div className="absolute bottom-12 left-4 right-4 pointer-events-auto z-10 flex items-center gap-2">
+          <input
+            type="range"
+            min={0} max={100} step={1}
+            value={Math.round((beamView.sectionCutX ?? 0.5) * 100)}
+            onChange={(e) => beamSetView({ sectionCutX: Number(e.target.value) / 100 })}
+            className="flex-1"
+          />
+          <span className="text-[9px] text-primary-fixed-dim font-mono shrink-0 w-8 text-right">{Math.round((beamView.sectionCutX ?? 0.5) * 100)}%</span>
+        </div>
+      )}
 
       {/* Viewport Bottom HUD */}
       <div className="absolute bottom-4 left-4 right-4 pointer-events-none flex justify-between items-end z-10">

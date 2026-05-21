@@ -2,7 +2,7 @@ import { useMemo, useRef, useEffect } from 'react';
 import * as THREE from 'three';
 import { useBeamStore } from '../store/beamStore';
 import { derive } from '../domain/kl/derive';
-import { buildBottom, buildTopSupport, buildTopThrough } from '../geometry/buildLongitudinal';
+import { buildBottom, buildMidBars, buildTopSupport, buildTopThrough } from '../geometry/buildLongitudinal';
 import { buildStirrupUnitGeometry } from '../geometry/buildStirrup';
 
 const REBAR_TOP_COLOR = '#ef5350';
@@ -10,6 +10,8 @@ const REBAR_BOT_COLOR = '#ffa726';
 const REBAR_BOT2_CORNER_COLOR = '#42a5f5'; // 二排角筋（伸入柱弯锚）— 蓝色
 const REBAR_BOT2_MID_COLOR = '#66bb6a';    // 二排中间筋（直锚12d不弯折）— 绿色
 const REBAR_SUP_COLOR = '#ab47bc';
+const REBAR_MID_CONSTRUCTION_COLOR = '#66bb6a'; // 构造筋 — 绿色
+const REBAR_MID_TORSION_COLOR = '#26c6da';       // 扭筋 — 青色
 const STIRRUP_COLOR = '#78909c';
 
 export function Rebars() {
@@ -20,6 +22,7 @@ export function Rebars() {
   const top = useMemo(() => (view.showLongitudinal ? buildTopThrough(params, d) : []), [params, d, view.showLongitudinal]);
   const bot = useMemo(() => (view.showLongitudinal ? buildBottom(params, d) : []), [params, d, view.showLongitudinal]);
   const sup = useMemo(() => (view.showLongitudinal ? buildTopSupport(params, d) : []), [params, d, view.showLongitudinal]);
+  const mid = useMemo(() => (view.showLongitudinal ? buildMidBars(params, d) : []), [params, d, view.showLongitudinal]);
 
   const stirrupGeom = useMemo(() => (view.showStirrups ? buildStirrupUnitGeometry(params) : null), [params, view.showStirrups]);
 
@@ -67,6 +70,11 @@ export function Rebars() {
       {sup.map((r, i) => (
         <mesh key={`s-${i}`} geometry={r.geometry} renderOrder={1}>
           <meshStandardMaterial color={REBAR_SUP_COLOR} metalness={0.7} roughness={0.35} envMapIntensity={1.2} />
+        </mesh>
+      ))}
+      {mid.map((r, i) => (
+        <mesh key={`m-${i}`} geometry={r.geometry} renderOrder={1}>
+          <meshStandardMaterial color={r.kind === 'mid-torsion' ? REBAR_MID_TORSION_COLOR : REBAR_MID_CONSTRUCTION_COLOR} metalness={0.7} roughness={0.35} envMapIntensity={1.2} />
         </mesh>
       ))}
       {stirrupGeom && stirrupXs.length > 0 && (

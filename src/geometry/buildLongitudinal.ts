@@ -9,7 +9,7 @@ import { tubeFromPolyline } from './rebarPath';
  *  z 在 [-(b/2 - cover - dStirrup - d/2), +...]
  */
 
-export type RebarKind = 'top' | 'bottom' | 'support' | 'bottom2-corner' | 'bottom2-mid';
+export type RebarKind = 'top' | 'bottom' | 'support' | 'bottom2-corner' | 'bottom2-mid' | 'mid-construction' | 'mid-torsion';
 
 export interface RebarBuilt {
   geometry: THREE.BufferGeometry;
@@ -175,6 +175,68 @@ export function buildBottom(p: BeamParams, d: Derived): RebarBuilt[] {
           }
         }
       });
+    }
+  }
+  return out;
+}
+
+/** 中部钢筋：侧面纵向构造筋 / 受扭纵筋 (22G101-1 p2-41)
+ *  沿梁侧面高度均匀分布, 搭接锚固: 构造筋 15d, 受扭纵筋 l_lE
+ *  位置: 梁两侧, y 在上下主筋之间均分
+ */
+export function buildMidBars(p: BeamParams, d: Derived): RebarBuilt[] {
+  const out: RebarBuilt[] = [];
+  for (let i = 0; i < p.spans.length; i++) {
+    const sp = p.spans[i];
+    if (!sp.midBarEnabled) continue;
+
+    const dStir = sp.stirrup.diameter;
+    const dsp = d.spans[i];
+    const isFirst = i === 0;
+    const isLast = i === p.spans.length - 1;
+
+    // 确定使用的钢筋参数
+    const midType = sp.midBarType ?? 'construction';
+    const bundle = midType === 'torsion'
+      ? (sp.midTorsionBar ?? { grade: 'HRB400', diameter: 14, count: 2 })
+      : (sp.midConstructionBar ?? { grade: 'HRB400', diameter: 12, count: 2 });
+    const dia = bundle.diameter;
+    const kind: RebarKind = midType === 'torsion' ? 'mid-torsion' : 'mid-construction';
+
+    // 每侧 count 根, 沿高度均匀分布
+    const countPerSide = bundle.count;
+
+    // y 范围: 上部主筋下缘 到 下部主筋上缘
+    const topY = p.h - p.cover - dStir - p.topThrough.diameter / 2;
+    const botY = p.cover + dStir + sp.bottom.diameter / 2;
+    const yStart = botY + sp.bottom.diameter / 2 + Math.max(25, dia);
+    const yEnd = topY - p.topThrough.diameter / 2 - Math.max(25, dia);
+
+    // 两侧 z 坐标
+    const zLeft = -(p.b / 2 - p.cover - dStir - dia / 2);
+    const zRight = p.b / 2 - p.cover - dStir - dia / 2;
+
+    // x 范围: 构造筋搭接锚固 15d, 受扭纵筋按 laE 或同下部筋
+    const anchorLen = midType === 'torsion' ? d.bottomAnchorPerSpan[i].horizontal : 15 * dia;
+    const xLeft = dsp.x0 - sp.hcLeft + p.cover + (isFirst ? anchorLen : 0);
+    const xRight = dsp.x1 + sp.hcRight - p.cover - (isLast ? anchorLen : 0);
+
+    for (let side = 0; side < 2; side++) {
+      const z = side === 0 ? zLeft : zRight;
+      for (let j = 0; j < countPerSide; j++) {
+        const y = countPerSide === 1
+          ? (yStart + yEnd) / 2
+          : yStart + j * (yEnd - yStart) / (countPerSide - 1);
+        const pts = [
+          new THREE.Vector3(xLeft, y, z),
+          new THREE.Vector3(xRight, y, z),
+        ];
+        out.push({
+          geometry: tubeFromPolyline(pts, dia / 2),
+          meta: { label: `第${i + 1}跨${midType === 'torsion' ? '扭筋' : '构造筋'} ${side === 0 ? '左' : '右'}侧 ${j + 1}/${countPerSide}`, length: 0 },
+          kind,
+        });
+      }
     }
   }
   return out;
