@@ -416,13 +416,24 @@ function SectionView() {
             );
           })()}
 
-          {/* 内箍筋 (legs=4): 居中, 宽度约外箍筋的一半, 显示完整闭合矩形以反映 2 个内肢 */}
-          {sp.stirrup.legs === 4 && (() => {
-            const innerHalfW = (sx1 - sx0) / 4;
-            const ix0 = (sx0 + sx1) / 2 - innerHalfW;
-            const ix1 = (sx0 + sx1) / 2 + innerHalfW;
+          {/* 内箍筋 (legs=4): 包绕上部中间两根主筋, 顶-左角 135° 弯钩 (样式与外箍筋一致) */}
+          {sp.stirrup.legs === 4 && topXs.length >= 4 && (() => {
+            // 取上部中间两根主筋 (索引 m1, m2): 内箍筋两根竖肢正切于这两根筋的外侧
+            const m1 = Math.floor(topXs.length / 2) - 1;
+            const m2 = Math.floor(topXs.length / 2);
+            const ix0 = topXs[m1] - dTop / 2;     // 左竖肢: 切于左侧中部主筋的外左
+            const ix1 = topXs[m2] + dTop / 2;     // 右竖肢: 切于右侧中部主筋的外右
+            const hookLen = 5 * sp.stirrup.diameter * scale;
+            const dx = hookLen * Math.SQRT1_2;
+            // 弯钩避开中部主筋 (位于 topXs[m1]): 紧贴该主筋右侧 + 1
+            const topHookStartX = topXs[m1] + dTop / 2 + 1;
+            const leftHookStartY = topY + dTop / 2 + 1;
             return (
-              <rect x={ix0} y={sy0} width={ix1 - ix0} height={sy1 - sy0} fill="none" stroke="#78909c" strokeWidth={1.5} rx={3} />
+              <g>
+                <rect x={ix0} y={sy0} width={ix1 - ix0} height={sy1 - sy0} fill="none" stroke="#78909c" strokeWidth={2.5} rx={3} />
+                <line x1={topHookStartX} y1={sy0} x2={topHookStartX + dx} y2={sy0 + dx} stroke="#78909c" strokeWidth={2.5} strokeLinecap="round" />
+                <line x1={ix0} y1={leftHookStartY} x2={ix0 + dx} y2={leftHookStartY + dx} stroke="#78909c" strokeWidth={2.5} strokeLinecap="round" />
+              </g>
             );
           })()}
 
@@ -479,7 +490,7 @@ function SectionView() {
               topRow2Count === 1 ? (sx0 + sx1) / 2 : sx0 + barOff + (i * (sx1 - sx0 - 2 * barOff)) / (topRow2Count - 1)
             );
             return xs2.map((cx, i) => (
-              <circle key={`t2-${i}`} cx={cx} cy={topY2} r={Math.max(dSup / 2, 3)} fill="#ec407a" filter="url(#glow)" />
+              <circle key={`t2-${i}`} cx={cx} cy={topY2} r={Math.max(dSup / 2, 3)} fill="#26c6da" filter="url(#glow)" />
             ));
           })()}
 

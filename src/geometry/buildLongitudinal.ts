@@ -119,9 +119,11 @@ export function buildBottom(p: BeamParams, d: Derived): RebarBuilt[] {
     const anchor = d.bottomAnchorPerSpan[i];
 
     // 左支座外边 x：累加直到该跨左支座外边
-    // 下部钢筋稍短：弯钩落在上部贯通筋弯钩内侧 (inset = 上部直径 + 本筋直径 + 5mm 间隙)
+    // 弯钩自外向内分层错开 (上1→上2→下1→下2), 每层步距 hookStep
     const dsp = d.spans[i];
-    const inset = p.topThrough.diameter + dia + 5;
+    const dTop = p.topThrough.diameter;
+    const hookStep = Math.max(dTop, dia, sp.bottomRow2?.diameter ?? 0) + 25;  // 每层之间净距 ~25mm
+    const inset = 2 * hookStep;          // 下一排 = 上1 + 2 步 (跳过上2)
     const isFirst = i === 0;
     const isLast = i === p.spans.length - 1;
     const xLeftOuter = dsp.x0 - sp.hcLeft + p.cover + (isFirst ? inset : 0);
@@ -149,8 +151,8 @@ export function buildBottom(p: BeamParams, d: Derived): RebarBuilt[] {
       const y2 = y + dia / 2 + clearGap + dia2 / 2;
       const zs2 = distributeZ(p.b, p.cover, dStir, dia2, sp.bottomRow2.count);
       const anchor2 = d.bottomAnchorPerSpan[i]; // 角筋锚固参数同一排
-      // 二排角筋比一排稍短，避免弯钩重叠：额外内缩一排直径+间隙
-      const inset2 = inset + dia + 5;
+      // 下二排弯钩 = 上1 + 3 步 (相对下一排再内缩一步)
+      const inset2 = 3 * hookStep;
       const xLeft2Anchor = dsp.x0 - sp.hcLeft + p.cover + (isFirst ? inset2 : 0);
       const xRight2Anchor = dsp.x1 + sp.hcRight - p.cover - (isLast ? inset2 : 0);
       const yUp2 = y2 + anchor2.vertical;
@@ -349,13 +351,17 @@ export function buildTopSupport(p: BeamParams, d: Derived): RebarBuilt[] {
     const ext = d.topSupportExtend[i];
 
     // 左支座负筋: 第一排 ln/3, 第二排 ln/4 (22G101-1)
+    // 弯钩自外向内分层错开顺序: 上1 → 上2 → 下1 → 下2
     if (sp.topLeftSupport) {
       const bundle: RebarBundle = sp.topLeftSupport;
       const dia = bundle.diameter;
       const split = splitSupportRows(p.b, p.cover, dThru, nThru, dia, bundle.count);
       const xOuter = dsp.x0 - sp.hcLeft + p.cover;
-      const xEndRow1 = dsp.x0 + ext.left;                      // ln/3 端点 (一排)
-      const xEndRow2 = dsp.x0 + ext.left * 0.75;               // ln/4 端点 (二排)
+      // 弯钩分层错开: 上二排相对上一排内缩 1 步 (与下部钢筋的 hookStep 同步)
+      const hookStep = Math.max(dThru, dia, sp.bottom.diameter, sp.bottomRow2?.diameter ?? 0) + 25;
+      const xOuterRow2 = xOuter + hookStep;
+      const xEndRow1 = dsp.x0 + ext.left;                         // ln/3 端点 (一排)
+      const xEndRow2 = dsp.x0 + ext.left * 0.75;                  // ln/4 端点 (二排)
       const isEnd = i === 0;
       const xStartRow1 = !isEnd ? d.spans[i - 1].x1 - d.topSupportExtend[i - 1].right : undefined;
       const xStartRow2 = !isEnd ? d.spans[i - 1].x1 - d.topSupportExtend[i - 1].right * 0.75 : undefined;
@@ -364,12 +370,12 @@ export function buildTopSupport(p: BeamParams, d: Derived): RebarBuilt[] {
         const zs = pickZ(split.row1);
         zs.forEach((z) => drawSupBar(bundle, dia, z, y, xOuter, xEndRow1, 'L', isEnd, `第${i + 1}跨左支座负筋一排`, xStartRow1));
       }
-      // 第二排 (在第一排下方, 排间净距 max(25, dia), 端点改为 ln/4)
+      // 第二排 (端点改为 ln/4, 弯钩内缩 row2Inset)
       if (split.row2 > 0) {
         const clearGap = Math.max(25, dia);
         const yRow2 = y - dMax / 2 - clearGap - dia / 2;
         const zs2 = row2Zs(split.row2, dia);
-        zs2.forEach((z) => drawSupBar(bundle, dia, z, yRow2, xOuter, xEndRow2, 'L', isEnd, `第${i + 1}跨左支座负筋二排`, xStartRow2, 'support-row2'));
+        zs2.forEach((z) => drawSupBar(bundle, dia, z, yRow2, xOuterRow2, xEndRow2, 'L', isEnd, `第${i + 1}跨左支座负筋二排`, xStartRow2, 'support-row2'));
       }
     }
 
@@ -379,8 +385,10 @@ export function buildTopSupport(p: BeamParams, d: Derived): RebarBuilt[] {
       const dia = bundle.diameter;
       const split = splitSupportRows(p.b, p.cover, dThru, nThru, dia, bundle.count);
       const xOuter = dsp.x1 + sp.hcRight - p.cover;
-      const xStartRow1 = dsp.x1 - ext.right;                   // ln/3 (一排)
-      const xStartRow2 = dsp.x1 - ext.right * 0.75;            // ln/4 (二排)
+      const hookStep = Math.max(dThru, dia, sp.bottom.diameter, sp.bottomRow2?.diameter ?? 0) + 25;
+      const xOuterRow2 = xOuter - hookStep;                       // 右端: 内缩方向向左
+      const xStartRow1 = dsp.x1 - ext.right;                     // ln/3 (一排)
+      const xStartRow2 = dsp.x1 - ext.right * 0.75;              // ln/4 (二排)
       if (split.row1 > 0) {
         const zs = pickZ(split.row1);
         zs.forEach((z) => drawSupBar(bundle, dia, z, y, xOuter, xStartRow1, 'R', true, `第${i + 1}跨右支座负筋一排`));
@@ -389,7 +397,7 @@ export function buildTopSupport(p: BeamParams, d: Derived): RebarBuilt[] {
         const clearGap = Math.max(25, dia);
         const yRow2 = y - dMax / 2 - clearGap - dia / 2;
         const zs2 = row2Zs(split.row2, dia);
-        zs2.forEach((z) => drawSupBar(bundle, dia, z, yRow2, xOuter, xStartRow2, 'R', true, `第${i + 1}跨右支座负筋二排`, undefined, 'support-row2'));
+        zs2.forEach((z) => drawSupBar(bundle, dia, z, yRow2, xOuterRow2, xStartRow2, 'R', true, `第${i + 1}跨右支座负筋二排`, undefined, 'support-row2'));
       }
     }
   }
