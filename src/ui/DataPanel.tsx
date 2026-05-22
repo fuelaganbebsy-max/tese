@@ -6,6 +6,7 @@ import { deriveColumn } from '../domain/kz/derive';
 import type { ColumnParams } from '../domain/kz/types';
 import { useMemberStore } from '../store/memberStore';
 import { derive } from '../domain/kl/derive';
+import { splitSupportRows } from '../geometry/buildLongitudinal';
 import { getMemberEntry } from '../memberRegistry';
 
 function SectionCutButton() {
@@ -275,14 +276,25 @@ function SectionView() {
   const distFromLeft = xCut - ds.x0;
   const distFromRight = ds.x1 - xCut;
 
-  // 上部支座负筋：左支座负筋延伸 ln/3 从左边界, 右支座负筋延伸 ln/3 从右边界
+  // 上部支座负筋: 一排伸入 ln/3, 二排伸入 ln/4 (22G101-1)
   const ext = d.topSupportExtend[spanIdx];
-  const hasTopLeft = distFromLeft <= ext.left;
-  const hasTopRight = distFromRight <= ext.right;
-  const topLeftCount = hasTopLeft ? (sp.topLeftSupport?.count ?? 0) : 0;
-  const topRightCount = hasTopRight ? (sp.topRightSupport?.count ?? 0) : 0;
-  // 总上部钢筋 = 贯通筋 + 支座负筋（去重：取最大值，因为贯通筋已占位）
-  const topTotalCount = tt.count + Math.max(topLeftCount, topRightCount);
+  const hasTopLeftRow1 = distFromLeft <= ext.left;
+  const hasTopLeftRow2 = distFromLeft <= ext.left * 0.75;       // ln/4
+  const hasTopRightRow1 = distFromRight <= ext.right;
+  const hasTopRightRow2 = distFromRight <= ext.right * 0.75;
+  const topLeftCount = hasTopLeftRow1 ? (sp.topLeftSupport?.count ?? 0) : 0;
+  const topRightCount = hasTopRightRow1 ? (sp.topRightSupport?.count ?? 0) : 0;
+  // 选取当前剖切处控制的支座负筋束
+  const activeSupBundle = topLeftCount >= topRightCount ? sp.topLeftSupport : sp.topRightSupport;
+  const activeSupCount = Math.max(topLeftCount, topRightCount);
+  const activeSupDia = activeSupBundle?.diameter ?? tt.diameter;
+  // 按表查最大单排根数, 超出则分两排
+  const supSplit = splitSupportRows(params.b, params.cover, tt.diameter, tt.count, activeSupDia, activeSupCount);
+  const topRow1Count = tt.count + supSplit.row1; // 第一排总数
+  // 二排仅在 ln/4 区间内存在
+  const inRow2Zone = (topLeftCount > 0 && hasTopLeftRow2) || (topRightCount > 0 && hasTopRightRow2);
+  const topRow2Count = inRow2Zone ? supSplit.row2 : 0;
+  const topTotalCount = topRow1Count;
 
   // 下部一排：在跨内始终存在
   const botCount = inSpan ? sp.bottom.count : 0;
@@ -350,17 +362,17 @@ function SectionView() {
   const midCount = midEnabled ? midBundle.count : 0;
   const midDia = midBundle.diameter * scale;
   const midColor = midType === 'torsion' ? '#26c6da' : '#66bb6a';
-  // y 均匀分布在上下主筋之间
-  const midYs: number[] = [];
-  if (midCount > 0) {
-    const mYStart = topY + barOff + 2;
-    const mYEnd = (row2Count > 0 ? botY2 : botY) - barOff - 2;
-    for (let i = 0; i < midCount; i++) {
-      midYs.push(midCount === 1
-        ? (mYStart + mYEnd) / 2
-        : mYStart + i * (mYEnd - mYStart) / (midCount - 1));
-    }
-  }
+  // 中部钢筋: 两腰各布 count/2 根, 总根数=输入纵筋数; 沿高度均分(count_perSide+1 段)
+  const midLeftCount = Math.ceil(midCount / 2);
+  const midRightCount = Math.floor(midCount / 2);
+  const computeYs = (n: number) => {
+    if (n <= 0) return [] as number[];
+    const mYTop = topY + dTop / 2;
+    const mYBot = (row2Count > 0 ? botY2 : botY) - (row2Count > 0 ? dBot2 / 2 : dBot / 2);
+    return Array.from({ length: n }, (_, i) => mYTop + ((i + 1) / (n + 1)) * (mYBot - mYTop));
+  };
+  const midLeftYs = computeYs(midLeftCount);
+  const midRightYs = computeYs(midRightCount);
 
   // 标注：区分贯通筋和支座筋
   const throughEnd = tt.count;
@@ -384,31 +396,92 @@ function SectionView() {
           {/* 混凝土截面轮廓 */}
           <rect x={innerPad} y={innerPad} width={W - innerPad * 2} height={H - innerPad * 2} fill="rgba(59,73,76,0.1)" stroke="rgba(59,73,76,0.6)" strokeWidth={2} />
 
-          {/* 箍筋 — 封闭矩形 (加粗) + 左上角135°弯钩 (22G101-1 p2-39) */}
+          {/* 箍筋 — 封闭矩形 + 闭合接头处 135° 弯钩 (22G101-1 p2-41)
+              两端钢筋于角部相遇, 各向梁内侧 135° 斜伸 max(10d, 75mm) ≈ 10d 示意 */}
           <rect x={sx0} y={sy0} width={sx1 - sx0} height={sy1 - sy0} fill="none" stroke="#78909c" strokeWidth={2.5} rx={3} />
-          {/* 左上角弯钩: 两根钩尾从顶边和左边向内斜伸 */}
-          <path d={`M ${sx0 + 8} ${sy0} l 6 6`} stroke="#78909c" strokeWidth={2.5} fill="none" strokeLinecap="round" />
-          <path d={`M ${sx0} ${sy0 + 8} l 6 6`} stroke="#78909c" strokeWidth={2.5} fill="none" strokeLinecap="round" />
+          {(() => {
+            // 剖切面示意: 箍筋 135° 弯钩平直段示意长度 (实际为 max(10d, 75mm), 此处取约 5d 便于阅图)
+            // 弯钩位置: 紧贴左上角主筋(红色)外侧, 不穿过主筋
+            const hookLen = 5 * sp.stirrup.diameter * scale;
+            const dx = hookLen * Math.SQRT1_2;
+            // 顶边弯钩: 从顶边、位于角部主筋右侧出发, 向右下斜伸
+            const topHookStartX = sx0 + barOff + dTop / 2 + 1;
+            // 左边弯钩: 从左边、位于角部主筋下侧出发, 向右下斜伸
+            const leftHookStartY = topY + dTop / 2 + 1;
+            return (
+              <g>
+                <line x1={topHookStartX} y1={sy0} x2={topHookStartX + dx} y2={sy0 + dx} stroke="#78909c" strokeWidth={2.5} strokeLinecap="round" />
+                <line x1={sx0} y1={leftHookStartY} x2={sx0 + dx} y2={leftHookStartY + dx} stroke="#78909c" strokeWidth={2.5} strokeLinecap="round" />
+              </g>
+            );
+          })()}
 
-          {/* 箍筋内肢 */}
-          {sp.stirrup.legs === 4 && (
-            <line x1={(sx0 + sx1) / 2} y1={sy0} x2={(sx0 + sx1) / 2} y2={sy1} stroke="#78909c" strokeWidth={1.5} />
-          )}
+          {/* 内箍筋 (legs=4): 居中, 宽度约外箍筋的一半, 显示完整闭合矩形以反映 2 个内肢 */}
+          {sp.stirrup.legs === 4 && (() => {
+            const innerHalfW = (sx1 - sx0) / 4;
+            const ix0 = (sx0 + sx1) / 2 - innerHalfW;
+            const ix1 = (sx0 + sx1) / 2 + innerHalfW;
+            return (
+              <rect x={ix0} y={sy0} width={ix1 - ix0} height={sy1 - sy0} fill="none" stroke="#78909c" strokeWidth={1.5} rx={3} />
+            );
+          })()}
 
 
-          {/* 中部钢筋（构造筋绿色/扭筋青色, 两侧各count根） */}
-          {midYs.map((my, i) => (
-            <g key={`mid${i}`}>
-              <circle cx={sx0 + barOff} cy={my} r={Math.max(midDia / 2, 2.5)} fill={midColor} filter="url(#glow)" />
-              <circle cx={sx1 - barOff} cy={my} r={Math.max(midDia / 2, 2.5)} fill={midColor} filter="url(#glow)" />
-            </g>
+          {/* 中部钢筋（构造筋绿色/扭筋青色, 两腰总根数=输入根数） */}
+          {midLeftYs.map((my, i) => (
+            <circle key={`midL${i}`} cx={sx0 + barOff} cy={my} r={Math.max(midDia / 2, 2.5)} fill={midColor} filter="url(#glow)" />
           ))}
+          {midRightYs.map((my, i) => (
+            <circle key={`midR${i}`} cx={sx1 - barOff} cy={my} r={Math.max(midDia / 2, 2.5)} fill={midColor} filter="url(#glow)" />
+          ))}
+          {/* 拉筋 (仅构造筋需要; 22G101-1 p2-41): 水平拉结两腰构造筋, 两端 135° 弯钩 ≥ 10d
+              弯钩沿水平方向回弯 135°, 即指向梁内(右下/左下), 长度 ≈ 10d */}
+          {midType === 'construction' && midLeftYs.map((my, i) => {
+            if (i >= midRightYs.length) return null;
+            // 拉筋: 一条 path 从左切点出发, 弧形绕过左构造筋外皮 → 水平段 → 弧形绕过右构造筋外皮 → 135° 斜尾入梁内
+            const cxL = sx0 + barOff;
+            const cxR = sx1 - barOff;
+            const r = midDia / 2;
+            const yTop = my - r;       // 顶切点
+            const yBot = my + r;       // 底切点
+            const hookLen = (10 / 3) * midBundle.diameter * scale;
+            const hd = hookLen * Math.SQRT1_2;
+            // 整条拉筋绘制为一条平滑路径:
+            //   左端: 从底切点 (cxL, yBot) 出发, 左端 135° 斜尾起点 = (cxL - hd, yBot + hd)
+            //   依次: 斜尾 → 弧形绕左构造筋外皮(底→左→顶) → 水平段顶切线 → 弧形绕右构造筋外皮(顶→右→底) → 右端斜尾
+            // 弧 sweep-flag: 左弧从 (cxL, yBot) 经左外侧到 (cxL, yTop) 走 sweep=1 (在 SVG 中沿外侧上行)
+            //                右弧从 (cxR, yTop) 经右外侧到 (cxR, yBot) 走 sweep=1
+            const path = [
+              `M ${cxL + hd} ${yBot + hd}`,                                    // 左端 135° 斜尾远端
+              `L ${cxL} ${yBot}`,                                              // 至左底切点
+              `A ${r} ${r} 0 0 1 ${cxL} ${yTop}`,                              // 弧形绕左构造筋外皮(底→左→顶, sweep=1 增角方向 90°→180°→270°)
+              `L ${cxR} ${yTop}`,                                              // 水平段顶切线
+              `A ${r} ${r} 0 0 1 ${cxR} ${yBot}`,                              // 弧形绕右构造筋外皮(顶→右→底)
+              `L ${cxR - hd} ${yBot + hd}`,                                    // 右端 135° 斜尾远端
+            ].join(' ');
+            return (
+              <path key={`tie${i}`} d={path} stroke="#78909c" strokeWidth={1.5} fill="none"
+                strokeLinecap="round" strokeLinejoin="round" />
+            );
+          })}
 
-          {/* 上部钢筋 (贯通筋红色, 支座负筋紫色) */}
+          {/* 上部钢筋一排 (贯通筋红色, 支座负筋紫色) */}
           {topXs.map((cx, i) => (
             <circle key={`t${i}`} cx={cx} cy={topY} r={Math.max(dTop / 2, 3)}
               fill={i < throughEnd ? '#ef5350' : '#ab47bc'} filter="url(#glow)" />
           ))}
+          {/* 上部钢筋二排 (支座负筋, 紫色, 在第一排正下方按净距) */}
+          {topRow2Count > 0 && (() => {
+            const dSup = activeSupDia * scale;
+            const clearGap = Math.max(25, activeSupDia) * scale;
+            const topY2 = topY + dTop / 2 + clearGap + dSup / 2;
+            const xs2 = Array.from({ length: topRow2Count }, (_, i) =>
+              topRow2Count === 1 ? (sx0 + sx1) / 2 : sx0 + barOff + (i * (sx1 - sx0 - 2 * barOff)) / (topRow2Count - 1)
+            );
+            return xs2.map((cx, i) => (
+              <circle key={`t2-${i}`} cx={cx} cy={topY2} r={Math.max(dSup / 2, 3)} fill="#ec407a" filter="url(#glow)" />
+            ));
+          })()}
 
           {/* 下部一排钢筋 (橙色) */}
           {botXs.map((cx, i) => (

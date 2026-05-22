@@ -9,7 +9,8 @@ const REBAR_TOP_COLOR = '#ef5350';
 const REBAR_BOT_COLOR = '#ffa726';
 const REBAR_BOT2_CORNER_COLOR = '#42a5f5'; // 二排角筋（伸入柱弯锚）— 蓝色
 const REBAR_BOT2_MID_COLOR = '#66bb6a';    // 二排中间筋（直锚12d不弯折）— 绿色
-const REBAR_SUP_COLOR = '#ab47bc';
+const REBAR_SUP_COLOR = '#ab47bc';        // 一排支座负筋 — 紫色
+const REBAR_SUP2_COLOR = '#ec407a';       // 二排支座负筋 — 玫红色
 const REBAR_MID_CONSTRUCTION_COLOR = '#66bb6a'; // 构造筋 — 绿色
 const REBAR_MID_TORSION_COLOR = '#26c6da';       // 扭筋 — 青色
 const STIRRUP_COLOR = '#78909c';
@@ -69,7 +70,8 @@ export function Rebars() {
       })}
       {sup.map((r, i) => (
         <mesh key={`s-${i}`} geometry={r.geometry} renderOrder={1}>
-          <meshStandardMaterial color={REBAR_SUP_COLOR} metalness={0.7} roughness={0.35} envMapIntensity={1.2} />
+          <meshStandardMaterial color={r.kind === 'support-row2' ? REBAR_SUP2_COLOR : REBAR_SUP_COLOR}
+            metalness={0.7} roughness={0.35} envMapIntensity={1.2} />
         </mesh>
       ))}
       {mid.map((r, i) => (

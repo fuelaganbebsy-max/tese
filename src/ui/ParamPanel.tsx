@@ -117,10 +117,12 @@ function BundleEditor({
   label,
   value,
   onChange,
+  evenOnly = false,
 }: {
   label: string;
   value: { grade: RebarGrade; diameter: number; count: number };
   onChange: (b: { grade: RebarGrade; diameter: number; count: number }) => void;
+  evenOnly?: boolean;
 }) {
   return (
     <div className="flex flex-col gap-1.5">
@@ -151,11 +153,16 @@ function BundleEditor({
         </select>
         <input
           type="number"
-          min={1}
+          min={evenOnly ? 2 : 1}
           max={20}
+          step={evenOnly ? 2 : 1}
           className="bg-surface-container-lowest border border-white/10 rounded focus:border-primary-fixed-dim h-7 px-2 font-mono text-[10px] text-on-surface text-center"
           value={value.count}
-          onChange={(e) => onChange({ ...value, count: Math.max(1, Number(e.target.value)) })}
+          onChange={(e) => {
+            let n = Math.max(evenOnly ? 2 : 1, Number(e.target.value));
+            if (evenOnly && n % 2 !== 0) n += 1;
+            onChange({ ...value, count: n });
+          }}
         />
       </div>
     </div>
@@ -262,12 +269,14 @@ function SpanEditor({
                   label="构造钢筋（侧面纵向构造筋）"
                   value={span.midConstructionBar ?? { grade: 'HRB400', diameter: 12, count: 2 }}
                   onChange={(b) => onChange({ ...span, midConstructionBar: b })}
+                  evenOnly
                 />
               ) : (
                 <BundleEditor
                   label="扭筋（受扭纵向钢筋）"
                   value={span.midTorsionBar ?? { grade: 'HRB400', diameter: 14, count: 2 }}
                   onChange={(b) => onChange({ ...span, midTorsionBar: b })}
+                  evenOnly
                 />
               )}
             </div>
