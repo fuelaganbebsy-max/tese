@@ -192,11 +192,24 @@ function SpanEditor({
   const row2MidCount = Math.max(0, row2Count - 2);
   const topThrough = useBeamStore((s) => s.params.topThrough);
   const setParams = useBeamStore((s) => s.setParams);
+  const view = useBeamStore((s) => s.view);
+  const setView = useBeamStore((s) => s.setView);
   return (
     <div className="rounded-lg border border-white/5 bg-surface-container-highest/30 overflow-hidden">
       <div className="px-3 py-2 bg-surface-container-highest/50 border-b border-white/5 flex items-center justify-between">
         <span className="font-label-numeric text-[10px] text-primary-fixed-dim font-mono">第 {idx + 1} / {total} 跨</span>
-        <span className="font-label-numeric text-[10px] text-on-surface-variant font-mono">ln = {span.ln}mm</span>
+        <div className="flex items-center gap-2">
+          <span className="font-label-numeric text-[10px] text-on-surface-variant font-mono">ln = {span.ln}mm</span>
+          <label className="relative inline-flex items-center cursor-pointer" title="显示/隐藏净跨标注">
+            <input
+              type="checkbox"
+              checked={!!view.showAnnotationNetSpan}
+              onChange={() => setView({ showAnnotationNetSpan: !view.showAnnotationNetSpan })}
+              className="sr-only peer"
+            />
+            <div className="w-7 h-3.5 bg-surface-container-highest rounded-full peer peer-checked:bg-blue-400/50 after:content-[''] after:absolute after:top-[1px] after:left-[1px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:after:translate-x-3.5" />
+          </label>
+        </div>
       </div>
       <div className="p-3 space-y-3">
         <div className="grid grid-cols-3 gap-2">
@@ -216,16 +229,42 @@ function SpanEditor({
             value={topThrough}
             onChange={(b) => setParams((p) => ({ ...p, topThrough: b }))}
           />
-          <BundleEditor
-            label="左支座负筋"
-            value={span.topLeftSupport ?? { grade: 'HRB400', diameter: 25, count: 2 }}
-            onChange={(b) => onChange({ ...span, topLeftSupport: b })}
-          />
-          <BundleEditor
-            label="右支座负筋"
-            value={span.topRightSupport ?? { grade: 'HRB400', diameter: 25, count: 2 }}
-            onChange={(b) => onChange({ ...span, topRightSupport: b })}
-          />
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex-1">
+              <BundleEditor
+                label="左支座负筋"
+                value={span.topLeftSupport ?? { grade: 'HRB400', diameter: 25, count: 2 }}
+                onChange={(b) => onChange({ ...span, topLeftSupport: b })}
+              />
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer shrink-0 mt-5" title="显示/隐藏左支座负筋伸出长度标注">
+              <input
+                type="checkbox"
+                checked={!!view.showAnnotationTopLeft}
+                onChange={() => setView({ showAnnotationTopLeft: !view.showAnnotationTopLeft })}
+                className="sr-only peer"
+              />
+              <div className="w-7 h-3.5 bg-surface-container-highest rounded-full peer peer-checked:bg-purple-400/50 after:content-[''] after:absolute after:top-[1px] after:left-[1px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:after:translate-x-3.5" />
+            </label>
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex-1">
+              <BundleEditor
+                label="右支座负筋"
+                value={span.topRightSupport ?? { grade: 'HRB400', diameter: 25, count: 2 }}
+                onChange={(b) => onChange({ ...span, topRightSupport: b })}
+              />
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer shrink-0 mt-5" title="显示/隐藏右支座负筋伸出长度标注">
+              <input
+                type="checkbox"
+                checked={!!view.showAnnotationTopRight}
+                onChange={() => setView({ showAnnotationTopRight: !view.showAnnotationTopRight })}
+                className="sr-only peer"
+              />
+              <div className="w-7 h-3.5 bg-surface-container-highest rounded-full peer peer-checked:bg-purple-400/50 after:content-[''] after:absolute after:top-[1px] after:left-[1px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:after:translate-x-3.5" />
+            </label>
+          </div>
         </div>
 
         {/* ── 中部钢筋 ── */}
@@ -337,9 +376,20 @@ function SpanEditor({
 
         {/* ── 箍筋 ── */}
         <div className="pt-2 border-t border-white/5 space-y-2">
-          <div className="text-[10px] tracking-widest text-on-surface-variant font-bold flex items-center gap-1">
-            <span className="material-symbols-outlined text-[12px]">grid_4x4</span>
-            箍筋
+          <div className="flex items-center justify-between">
+            <div className="text-[10px] tracking-widest text-on-surface-variant font-bold flex items-center gap-1">
+              <span className="material-symbols-outlined text-[12px]">grid_4x4</span>
+              箍筋
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer" title="显示/隐藏加密区长度标注">
+              <input
+                type="checkbox"
+                checked={!!view.showAnnotationStirrup}
+                onChange={() => setView({ showAnnotationStirrup: !view.showAnnotationStirrup })}
+                className="sr-only peer"
+              />
+              <div className="w-7 h-3.5 bg-surface-container-highest rounded-full peer peer-checked:bg-primary-fixed-dim/60 after:content-[''] after:absolute after:top-[1px] after:left-[1px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:after:translate-x-3.5" />
+            </label>
           </div>
           <BundleEditor
             label="规格（等级 / 直径 / 肢数）"
@@ -764,7 +814,7 @@ export function BeamParamContent() {
 
 /* ---------- Inspector root ---------- */
 
-export function ParamPanel() {
+export function ParamPanel({ panelWidth = 340 }: { panelWidth?: number }) {
   const [activeTab, setActiveTab] = useState<'params' | 'ai'>('params');
   const activeType = useMemberStore((s) => s.activeType);
   const isBeam = activeType === 'KL' || activeType === 'L' || activeType === 'WKL' || activeType === 'XL';
@@ -798,8 +848,43 @@ export function ParamPanel() {
     );
   }
 
+  const fontScale = Math.max(1, Math.min(2, 1 + (panelWidth - 340) * 0.003));
+
   return (
-    <aside className="bg-[#0d0d0d] border-l border-white/5 flex flex-col h-full shrink-0 z-30 w-full">
+    <aside
+      data-panel-scale=""
+      className="bg-[#0d0d0d] border-l border-white/5 flex flex-col h-full shrink-0 z-30 w-full"
+      style={{ '--ps': fontScale } as React.CSSProperties}
+    >
+      <style>{`
+        [data-panel-scale] {
+          font-size: calc(14px * var(--ps));
+        }
+        [data-panel-scale] .text-body-sm,
+        [data-panel-scale] .font-body-sm {
+          font-size: calc(12px * var(--ps)) !important;
+        }
+        [data-panel-scale] .text-body-md,
+        [data-panel-scale] .font-body-md {
+          font-size: calc(14px * var(--ps)) !important;
+        }
+        [data-panel-scale] .text-label-numeric,
+        [data-panel-scale] .font-label-numeric {
+          font-size: calc(13px * var(--ps)) !important;
+        }
+        [data-panel-scale] .text-\\[10px\\] {
+          font-size: calc(10px * var(--ps)) !important;
+        }
+        [data-panel-scale] .text-\\[11px\\] {
+          font-size: calc(11px * var(--ps)) !important;
+        }
+        [data-panel-scale] .text-\\[14px\\] {
+          font-size: calc(14px * var(--ps)) !important;
+        }
+        [data-panel-scale] .text-\\[18px\\] {
+          font-size: calc(18px * var(--ps)) !important;
+        }
+      `}</style>
       {/* Inspector Nav Tabs */}
       <div className="flex border-b border-white/10 shrink-0 bg-surface-container-highest/50">
         <button

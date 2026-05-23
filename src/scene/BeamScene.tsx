@@ -8,6 +8,7 @@ import { Concrete } from './Concrete';
 import { Rebars } from './Rebars';
 import { Columns } from './Columns';
 import { SectionCutPlane } from './SectionCutPlane';
+import { BeamAnnotations } from './BeamAnnotations';
 
 function CameraController({ center, camDist, h }: { center: [number, number, number]; camDist: number; h: number }) {
   const { camera } = useThree();
@@ -68,6 +69,7 @@ export function BeamScene() {
         <Columns />
         <Rebars />
         <SectionCutPlane />
+        <BeamAnnotations />
       </group>
 
       <Grid

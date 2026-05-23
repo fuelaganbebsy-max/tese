@@ -106,7 +106,7 @@ export default function App() {
           <>
             <ResizeHandle direction="horizontal" onResize={handleRightResize} />
             <div className="shrink-0 h-full overflow-y-auto" style={{ width: rightW }}>
-              <ParamPanel />
+              <ParamPanel panelWidth={rightW} />
             </div>
           </>
         )}

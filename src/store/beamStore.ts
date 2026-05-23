@@ -12,6 +12,10 @@ interface ViewState {
   showColumns: boolean;
   showSectionCut: boolean;
   sectionCutX: number;
+  showAnnotationTopLeft: boolean;
+  showAnnotationTopRight: boolean;
+  showAnnotationStirrup: boolean;
+  showAnnotationNetSpan: boolean;
 }
 
 interface UiState {
@@ -45,7 +49,7 @@ interface BeamStore {
 export const useBeamStore = create<BeamStore>()(persist(
   (set, get) => ({
   params: defaultBeam(),
-  view: { showConcrete: true, showStirrups: true, showLongitudinal: true, showAnnotations: true, showColumns: true, showSectionCut: false, sectionCutX: 0.5 },
+  view: { showConcrete: true, showStirrups: true, showLongitudinal: true, showAnnotations: true, showColumns: true, showSectionCut: false, sectionCutX: 0.5, showAnnotationTopLeft: true, showAnnotationTopRight: true, showAnnotationStirrup: true, showAnnotationNetSpan: true },
   ui: { sideNavCollapsed: false, inspectorCollapsed: false, dataPanelCollapsed: false },
   cameraCommand: null,
   _history: [],
@@ -90,7 +94,7 @@ export const useBeamStore = create<BeamStore>()(persist(
 }),
   {
     name: 'rebar-3d-beam',
-    version: 7,
+    version: 9,
     partialize: (state) => ({ params: state.params, view: state.view }),
     migrate: (persisted: any) => {
       try {
@@ -111,6 +115,16 @@ export const useBeamStore = create<BeamStore>()(persist(
         if (persisted && persisted.view) {
           if (persisted.view.showSectionCut == null) persisted.view.showSectionCut = false;
           if (persisted.view.sectionCutX == null) persisted.view.sectionCutX = 0.5;
+        }
+        // v7→v8: add annotation toggle defaults
+        if (persisted && persisted.view) {
+          if (persisted.view.showAnnotationTopLeft == null) persisted.view.showAnnotationTopLeft = true;
+          if (persisted.view.showAnnotationTopRight == null) persisted.view.showAnnotationTopRight = true;
+          if (persisted.view.showAnnotationStirrup == null) persisted.view.showAnnotationStirrup = true;
+        }
+        // v8→v9: add net span annotation toggle
+        if (persisted && persisted.view) {
+          if (persisted.view.showAnnotationNetSpan == null) persisted.view.showAnnotationNetSpan = true;
         }
         return persisted;
       } catch {
