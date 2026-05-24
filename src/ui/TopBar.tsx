@@ -30,7 +30,7 @@ export function TopBar() {
           >
             view_in_ar
           </span>
-          Alpha-7 钢筋核心工程
+          Octopus的AI钢筋平法工具
         </div>
         {/* Search Bar */}
         <div className="relative w-64 ml-4 hidden md:block">

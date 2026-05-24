@@ -1,5 +1,5 @@
 // Force Vite re-hash (2)
-import { useMemo } from 'react';
+import { useMemo, useState, useRef, useCallback } from 'react';
 import { useBeamStore } from '../store/beamStore';
 import { useColumnStore } from '../store/columnStore';
 import { deriveColumn } from '../domain/kz/derive';
@@ -31,6 +31,17 @@ function SectionCutButton() {
 function ColumnSectionView() {
   const params = useColumnStore((s) => s.params);
   const derived = useMemo(() => deriveColumn(params), [params]);
+  const [expanded, setExpanded] = useState(false);
+  const [size, setSize] = useState({ w: 400, h: 360 });
+  const startRef = useRef({ x: 0, y: 0, w: 0, h: 0 });
+  const onResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    startRef.current = { x: e.clientX, y: e.clientY, w: size.w, h: size.h };
+    const onMove = (ev: MouseEvent) => setSize({ w: Math.max(220, startRef.current.w + startRef.current.x - ev.clientX), h: Math.max(180, startRef.current.h + startRef.current.y - ev.clientY) });
+    const onUp = () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }, [size]);
   const W = 200;
   const dim = Math.max(params.b, params.h);
   const aspect = params.h / params.b;
@@ -46,15 +57,30 @@ function ColumnSectionView() {
   const y1 = H - innerPad - c;
 
   return (
-    <div className="w-1/3 rounded-xl bg-surface-container/80 backdrop-blur-[20px] border border-white/5 flex flex-col overflow-hidden">
-      <div className="px-4 py-2 border-b border-white/5 bg-surface-container-highest/30 flex justify-between items-center shrink-0">
+    <div
+      className={expanded ? 'rounded-xl flex flex-col overflow-hidden shadow-2xl' : 'w-1/3 rounded-xl bg-surface-container/80 backdrop-blur-[20px] border border-white/5 flex flex-col overflow-hidden'}
+      style={expanded ? { position: 'fixed', bottom: 16, right: 16, width: size.w, height: size.h, zIndex: 9999, background: 'rgba(13,13,13,0.97)', border: '1px solid rgba(0,218,243,0.25)', boxShadow: '0 8px 48px rgba(0,0,0,0.8)' } : {}}
+    >
+      {expanded && (
+        <div
+          style={{ position: 'absolute', top: 0, left: 0, width: 20, height: 20, cursor: 'nw-resize', zIndex: 10 }}
+          onMouseDown={onResizeStart}
+          title="拖动调整大小"
+        />
+      )}
+      <div
+        className="px-4 py-2 border-b border-white/5 bg-surface-container-highest/30 flex justify-between items-center shrink-0 select-none"
+        style={{ cursor: 'pointer' }}
+        onDoubleClick={() => setExpanded(v => !v)}
+        title={expanded ? '双击还原' : '双击放大'}
+      >
         <h3 className="font-body-md text-body-md font-medium text-on-surface font-bold">
           剖切面 <span className="text-on-surface-variant text-[11px] ml-1">(Section A-A)</span>
         </h3>
         <SectionCutButton />
       </div>
       <div className="flex-1 p-4 flex items-center justify-center relative bg-surface-container-lowest">
-        <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`}>
+        <svg width={expanded ? size.w - 32 : W} height={expanded ? size.h - 72 : H} viewBox={`0 0 ${W} ${H}`}>
           <rect x={innerPad} y={innerPad} width={W - innerPad * 2} height={H - innerPad * 2} fill="none" stroke="rgba(59,73,76,0.5)" strokeWidth={2} />
           {/* grid lines */}
           {[0.25, 0.5, 0.75].map((f) => (
@@ -253,6 +279,17 @@ function SectionView() {
   const params = useBeamStore((s) => s.params);
   const view = useBeamStore((s) => s.view);
   const d = useMemo(() => derive(params), [params]);
+  const [expanded, setExpanded] = useState(false);
+  const [size, setSize] = useState({ w: 400, h: 420 });
+  const startRef = useRef({ x: 0, y: 0, w: 0, h: 0 });
+  const onResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    startRef.current = { x: e.clientX, y: e.clientY, w: size.w, h: size.h };
+    const onMove = (ev: MouseEvent) => setSize({ w: Math.max(220, startRef.current.w + startRef.current.x - ev.clientX), h: Math.max(180, startRef.current.h + startRef.current.y - ev.clientY) });
+    const onUp = () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }, [size]);
 
   // 剖切位置 (0~1 → 实际 X)
   const xCut = (view.sectionCutX ?? 0.5) * d.totalLength;
@@ -377,16 +414,33 @@ function SectionView() {
   // 标注：区分贯通筋和支座筋
   const throughEnd = tt.count;
 
+  const svgW = expanded ? size.w - 32 : W;
+  const svgH = expanded ? size.h - 72 : H;
   return (
-    <div className="w-1/3 rounded-xl bg-surface-container/80 backdrop-blur-[20px] border border-white/5 flex flex-col overflow-hidden">
-      <div className="px-4 py-2 border-b border-white/5 bg-surface-container-highest/30 flex justify-between items-center shrink-0">
+    <div
+      className={expanded ? 'rounded-xl flex flex-col overflow-hidden shadow-2xl' : 'w-1/3 rounded-xl bg-surface-container/80 backdrop-blur-[20px] border border-white/5 flex flex-col overflow-hidden'}
+      style={expanded ? { position: 'fixed', bottom: 16, right: 16, width: size.w, height: size.h, zIndex: 9999, background: 'rgba(13,13,13,0.97)', border: '1px solid rgba(0,218,243,0.25)', boxShadow: '0 8px 48px rgba(0,0,0,0.8)' } : {}}
+    >
+      {expanded && (
+        <div
+          style={{ position: 'absolute', top: 0, left: 0, width: 20, height: 20, cursor: 'nw-resize', zIndex: 10 }}
+          onMouseDown={onResizeStart}
+          title="拖动调整大小"
+        />
+      )}
+      <div
+        className="px-4 py-2 border-b border-white/5 bg-surface-container-highest/30 flex justify-between items-center shrink-0 select-none"
+        style={{ cursor: 'pointer' }}
+        onDoubleClick={() => setExpanded(v => !v)}
+        title={expanded ? '双击还原' : '双击放大'}
+      >
         <h3 className="font-body-md text-body-md font-medium text-on-surface font-bold">
           剖切面 <span className="text-on-surface-variant text-[11px] ml-1">(Section A-A)</span>
         </h3>
         <SectionCutButton />
       </div>
       <div className="flex-1 p-4 flex flex-col items-center justify-center relative bg-surface-container-lowest gap-2">
-        <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`}>
+        <svg width={svgW} height={svgH} viewBox={`0 0 ${W} ${H}`}>
           <defs>
             <filter id="glow">
               <feGaussianBlur stdDeviation="1.5" result="blur" />

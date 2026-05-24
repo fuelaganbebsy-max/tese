@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
+import { LandingPage } from './ui/LandingPage';
 import './index.css';
 
 // 防止旧 localStorage 数据导致白屏：版本不匹配或数据损坏时清除
@@ -39,10 +40,17 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { err
   }
 }
 
+function Root() {
+  const [showApp, setShowApp] = useState(false);
+  return showApp
+    ? <App onBack={() => setShowApp(false)} />
+    : <LandingPage onEnter={() => setShowApp(true)} />;
+}
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <ErrorBoundary>
-      <App />
+      <Root />
     </ErrorBoundary>
   </React.StrictMode>,
 );

@@ -18,7 +18,7 @@ const STATUS_DOT: Record<string, string> = {
   planned: 'bg-white/20',
 };
 
-export function SideNav() {
+export function SideNav({ onBack }: { onBack?: () => void }) {
   const collapsed = useBeamStore((s) => s.ui.sideNavCollapsed);
   const setUi = useBeamStore((s) => s.setUi);
   const activeType = useMemberStore((s) => s.activeType);
@@ -91,21 +91,20 @@ export function SideNav() {
       className="bg-[#0d0d0d] border-r border-white/5 flex flex-col py-gutter shrink-0 z-30 w-full h-full"
     >
       {/* Header */}
-      <div className="px-gutter mb-6 flex items-center gap-3">
-        <div className="w-10 h-10 rounded-lg bg-surface-container-highest flex items-center justify-center border border-white/5 shadow-inner">
-          <span
-            className="material-symbols-outlined text-primary-fixed-dim"
-            style={{ fontVariationSettings: "'FILL' 1" }}
-          >
-            precision_manufacturing
-          </span>
-        </div>
-        <div>
-          <h2 className="font-display-lg text-primary-fixed-dim text-[16px] leading-tight font-bold">
-            Alpha-7 钢筋工程
-          </h2>
-          <p className="font-body-sm text-body-sm text-on-surface-variant opacity-70">22G101 全构件平台</p>
-        </div>
+      <div className="px-gutter mb-6 flex items-center gap-2">
+        <button
+          onClick={() => setUi({ sideNavCollapsed: true })}
+          title="收起"
+          className="flex items-center justify-center p-2.5 rounded-lg border border-white/10 text-on-surface-variant hover:bg-white/5 hover:text-on-surface transition-colors duration-200 active:scale-95 shrink-0"
+        >
+          <span className="material-symbols-outlined text-[18px]">chevron_left</span>
+        </button>
+        <button
+          onClick={onBack}
+          className="flex items-center justify-center gap-2 flex-1 px-3 py-2.5 rounded-lg border border-white/10 text-on-surface-variant hover:bg-white/5 hover:text-on-surface transition-colors duration-200 active:scale-95"
+        >
+          <span className="font-label-numeric text-label-numeric font-mono">返回首页</span>
+        </button>
       </div>
 
       {/* Member Type Groups */}
@@ -203,14 +202,6 @@ export function SideNav() {
         >
           <span className="material-symbols-outlined">settings</span>
           <span className="font-label-numeric text-label-numeric font-mono">设置</span>
-        </button>
-        <button
-          onClick={() => setUi({ sideNavCollapsed: true })}
-          title="收起"
-          className="flex items-center gap-4 text-on-surface-variant px-4 py-3 opacity-70 hover:bg-white/5 hover:text-on-surface transition-all rounded-lg w-full"
-        >
-          <span className="material-symbols-outlined">chevron_left</span>
-          <span className="font-label-numeric text-label-numeric font-mono">收起</span>
         </button>
       </div>
     </nav>
