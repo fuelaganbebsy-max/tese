@@ -1,5 +1,5 @@
 // Force Vite re-hash
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, lazy, Suspense } from 'react';
 import { PlaceholderScene } from './scene/PlaceholderScene';
 import { ParamPanel } from './ui/ParamPanel';
 import { TopBar } from './ui/TopBar';
@@ -12,6 +12,8 @@ import { useColumnStore } from './store/columnStore';
 import { useMemberStore } from './store/memberStore';
 import { MEMBER_TYPES, getMemberEntry } from './memberRegistry';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
+
+const AssistantPanel = lazy(() => import('./ui/ai/AssistantPanel'));
 
 const MEMBERS_WITH_UI = MEMBER_TYPES;
 
@@ -110,6 +112,11 @@ export default function App({ onBack }: { onBack?: () => void }) {
             </div>
           </>
         )}
+
+        {/* AI Assistant Panel */}
+        <Suspense fallback={null}>
+          <AssistantPanel />
+        </Suspense>
       </div>
     </div>
   );

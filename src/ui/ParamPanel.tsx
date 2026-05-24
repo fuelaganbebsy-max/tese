@@ -1,10 +1,12 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useBeamStore } from '../store/beamStore';
 import { useColumnStore } from '../store/columnStore';
 import type { BeamParams, ConcreteGrade, RebarGrade, SeismicLevel, Span, HaunchSpec } from '../domain/kl/types';
 import type { ColumnParams, ColumnSectionType } from '../domain/kz/types';
 import { useMemberStore } from '../store/memberStore';
 import { getMemberEntry } from '../memberRegistry';
+import { useAiStore } from './ai/aiStore';
+import { getProvider } from './ai/providers';
 
 const COMMON_DIA = [6, 8, 10, 12, 14, 16, 18, 20, 22, 25, 28, 32];
 const GRADES: RebarGrade[] = ['HPB300', 'HRB400', 'HRB500'];
@@ -429,46 +431,155 @@ function SpanEditor({
 
 /* ---------- AI Copilot Panel ---------- */
 
+type LocalMsg = { role: 'user' | 'assistant'; content: string; error?: string };
+
 function AiCopilot() {
+  const [optimMode, setOptimMode] = useState(false);
+  const [input, setInput] = useState('');
+  const [msgs, setMsgs] = useState<LocalMsg[]>([]);
+  const [isStreaming, setIsStreaming] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const params = useBeamStore((s) => s.params);
+  const apiKeys = useAiStore((s) => s.apiKeys);
+  const activeProviderId = useAiStore((s) => s.activeProviderId);
+  const activeModel = useAiStore((s) => s.activeModel);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [msgs]);
+
+  const handleToggle = () => {
+    const next = !optimMode;
+    setOptimMode(next);
+    if (next && msgs.length === 0) {
+      setMsgs([{ role: 'assistant', content: '已加载当前构件参数，可以针对该配筋方案提问。' }]);
+    }
+  };
+
+  const sendMessage = async () => {
+    const text = input.trim();
+    if (!text || isStreaming) return;
+    setInput('');
+
+    const history = msgs.map((m) => ({ role: m.role, content: m.content }));
+    history.push({ role: 'user', content: text });
+    setMsgs((prev) => [...prev, { role: 'user', content: text }, { role: 'assistant', content: '' }]);
+    setIsStreaming(true);
+
+    const systemPrompt = optimMode
+      ? `你是资深建筑结构工程师。当前3D模型（框架梁KL）参数如下：\n\`\`\`json\n${JSON.stringify(params, null, 2)}\n\`\`\`\n\n请基于以上参数，结合22G101图集和GB50010规范，回答用户问题并给出优化建议。`
+      : '你是资深建筑结构工程师，精通22G101平法图集和GB50010等规范，回答结构工程相关问题。';
+
+    const provider = getProvider(activeProviderId);
+    if (!provider || !apiKeys[activeProviderId]) { setIsStreaming(false); return; }
+
+    try {
+      let full = '';
+      await provider.chatStream(
+        history,
+        systemPrompt,
+        apiKeys[activeProviderId],
+        (chunk) => {
+          full += chunk;
+          setMsgs((prev) => {
+            const next = [...prev];
+            next[next.length - 1] = { ...next[next.length - 1], content: full };
+            return next;
+          });
+        },
+        { model: activeModel }
+      );
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : '请求失败';
+      setMsgs((prev) => {
+        const next = [...prev];
+        next[next.length - 1] = { ...next[next.length - 1], error: errMsg };
+        return next;
+      });
+    } finally {
+      setIsStreaming(false);
+    }
+  };
+
   return (
     <div className="flex-1 flex flex-col min-h-0">
-      {/* Glassy header */}
-      <div className="px-4 py-2 border-b border-white/5 flex items-center gap-2 sticky top-0 bg-surface-container-high/90 backdrop-blur-md z-10">
-        <span className="material-symbols-outlined text-primary-container text-[18px]">smart_toy</span>
-        <span className="font-body-sm text-body-sm font-medium text-on-surface">AI 结构助手</span>
+      {/* Header */}
+      <div className="px-4 py-2 border-b border-white/5 flex items-center justify-between sticky top-0 bg-surface-container-high/90 backdrop-blur-md z-10">
+        <div className="flex items-center gap-2">
+          <span className="material-symbols-outlined text-primary-container text-[18px]">smart_toy</span>
+          <span className="font-body-sm text-body-sm font-medium text-on-surface">AI 结构助手</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className={`text-[11px] transition-colors ${optimMode ? 'text-primary-fixed-dim' : 'text-on-surface-variant/50'}`}>
+            优化建议
+          </span>
+          <button
+            role="switch"
+            aria-checked={optimMode}
+            onClick={handleToggle}
+            title={optimMode ? '关闭优化建议模式' : '开启后可针对当前构件提问'}
+            className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+              optimMode ? 'bg-primary-fixed-dim' : 'bg-white/20'
+            }`}
+          >
+            <span
+              className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-md transition-transform duration-200 ease-in-out ${
+                optimMode ? 'translate-x-4' : 'translate-x-0'
+              }`}
+            />
+          </button>
+        </div>
       </div>
+
       {/* Chat Area */}
-      <div className="flex-1 p-4 overflow-y-auto flex flex-col gap-4">
-        {/* AI Message */}
-        <div className="flex gap-3">
-          <div className="w-6 h-6 rounded-full bg-primary-container/20 flex items-center justify-center shrink-0 border border-primary-container/30">
-            <span className="material-symbols-outlined text-primary-container text-[14px]">auto_awesome</span>
+      <div className="flex-1 p-3 overflow-y-auto flex flex-col gap-3">
+        {msgs.length === 0 && (
+          <div className="flex-1 flex items-center justify-center py-8">
+            <p className="text-[12px] text-on-surface-variant/40 text-center leading-relaxed">
+              开启「优化建议」后<br />可针对当前构件提问
+            </p>
           </div>
-          <div className="flex-1 bg-surface-container-highest/50 rounded-r-lg rounded-bl-lg p-3 border border-white/5 text-body-sm font-body-sm text-on-surface-variant leading-relaxed">
-            已分析当前梁配筋方案。根据GB50010-2010规范，体积配箍率偏高，存在优化空间。
-            <br /><br />
-            建议将加密区箍筋间距从 @100 调整为 @150。
+        )}
+        {msgs.map((msg, i) => (
+          <div key={i} className={`flex gap-2 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+            {msg.role === 'assistant' && (
+              <div className="w-5 h-5 rounded-full bg-primary-container/20 flex items-center justify-center shrink-0 border border-primary-container/30 mt-0.5">
+                <span className="material-symbols-outlined text-primary-container" style={{ fontSize: '12px' }}>auto_awesome</span>
+              </div>
+            )}
+            <div className={`max-w-[85%] rounded-lg px-2.5 py-2 text-[12px] leading-relaxed ${
+              msg.role === 'user'
+                ? 'bg-blue-600/80 text-white rounded-tr-sm'
+                : 'bg-surface-container-highest/50 border border-white/5 text-on-surface-variant rounded-tl-sm'
+            }`}>
+              {msg.error
+                ? <span className="text-red-400">{msg.error}</span>
+                : !msg.content && isStreaming && i === msgs.length - 1
+                ? <span className="text-on-surface-variant/40">思考中…</span>
+                : msg.content}
+            </div>
           </div>
-        </div>
-        {/* Quick Actions */}
-        <div className="flex flex-wrap gap-2 mt-auto pt-2">
-          <button className="px-3 py-1.5 rounded-full border border-primary-fixed-dim/40 bg-primary-fixed-dim/5 text-primary-fixed-dim font-body-sm text-[11px] hover:bg-primary-fixed-dim/10 transition-colors flex items-center gap-1">
-            <span className="material-symbols-outlined text-[14px]">trending_up</span> 建议优化
-          </button>
-          <button className="px-3 py-1.5 rounded-full border border-white/10 bg-surface-container-lowest text-on-surface font-body-sm text-[11px] hover:bg-white/5 transition-colors flex items-center gap-1">
-            <span className="material-symbols-outlined text-[14px]">rule</span> 查看规范
-          </button>
-        </div>
+        ))}
+        <div ref={messagesEndRef} />
       </div>
+
       {/* Input */}
-      <div className="p-3 border-t border-white/5 bg-surface-container-highest/20 shrink-0">
-        <div className="relative">
+      <div className="border-t border-white/5 bg-surface-container-highest/20 shrink-0">
+        <div className="p-3 relative">
           <input
-            className="w-full bg-surface-container-lowest border border-white/10 rounded-full py-2 pl-4 pr-10 text-body-sm font-body-sm text-on-surface focus:outline-none focus:border-primary-fixed-dim focus:ring-1 focus:ring-primary-fixed-dim transition-colors placeholder:text-on-surface-variant/40"
-            placeholder="输入优化指令..."
-            type="text"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
+            disabled={isStreaming}
+            className="w-full bg-surface-container-lowest border border-white/10 rounded-full py-2 pl-4 pr-10 text-body-sm font-body-sm text-on-surface focus:outline-none focus:border-primary-fixed-dim focus:ring-1 focus:ring-primary-fixed-dim transition-colors placeholder:text-on-surface-variant/40 disabled:opacity-50"
+            placeholder={optimMode ? '针对当前构件提问…' : '输入问题…'}
           />
-          <button className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-primary-container/10 flex items-center justify-center text-primary-container hover:bg-primary-container/20 transition-colors">
+          <button
+            onClick={sendMessage}
+            disabled={isStreaming || !input.trim()}
+            className="absolute right-5 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-primary-container/10 flex items-center justify-center text-primary-container hover:bg-primary-container/20 transition-colors disabled:opacity-30"
+          >
             <span className="material-symbols-outlined text-[16px]">send</span>
           </button>
         </div>

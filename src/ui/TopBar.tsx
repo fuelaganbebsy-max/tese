@@ -1,7 +1,10 @@
 import { useBeamStore } from '../store/beamStore';
+import { useAiStore } from './ai/aiStore';
 import { exportProject, importProjectFromFile } from '../domain/project';
 
 export function TopBar() {
+  const aiPanelOpen = useAiStore((s) => s.panelOpen);
+  const toggleAiPanel = useAiStore((s) => s.togglePanel);
   const undo = useBeamStore((s) => s.undo);
   const redo = useBeamStore((s) => s.redo);
   const params = useBeamStore((s) => s.params);
@@ -62,6 +65,22 @@ export function TopBar() {
             className="p-2 rounded-full text-on-surface-variant hover:bg-white/5 hover:text-on-surface transition-colors duration-200 active:scale-95"
           >
             <span className="material-symbols-outlined text-[20px]">redo</span>
+          </button>
+          <button
+            onClick={toggleAiPanel}
+            title="AI 结构助手"
+            className={`p-2 rounded-full transition-colors duration-200 active:scale-95 ${
+              aiPanelOpen
+                ? 'bg-primary-fixed-dim/15 text-primary-fixed-dim'
+                : 'text-on-surface-variant hover:bg-white/5 hover:text-on-surface'
+            }`}
+          >
+            <span
+              className="material-symbols-outlined text-[20px]"
+              style={aiPanelOpen ? { fontVariationSettings: "'FILL' 1" } : undefined}
+            >
+              smart_toy
+            </span>
           </button>
           <button
             className="p-2 rounded-full text-on-surface-variant hover:bg-white/5 hover:text-on-surface transition-colors duration-200 active:scale-95"
