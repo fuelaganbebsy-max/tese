@@ -34,6 +34,18 @@ export function ViewportHud() {
     : colParams.sectionType === 'circle'
       ? `\u2205${colParams.D}`
       : `${colParams.b}\u00d7${colParams.h}`;
+  const layerToggles = isBeam
+    ? ([
+      ['showConcrete', 'deployed_code', '混凝土'],
+      ['showColumns', 'view_column', '柱'],
+      ['showLongitudinal', 'horizontal_rule', '纵筋'],
+      ['showStirrups', 'grid_4x4', '箍筋'],
+    ] as const)
+    : ([
+      ['showConcrete', 'deployed_code', '混凝土'],
+      ['showLongitudinal', 'horizontal_rule', '纵筋'],
+      ['showStirrups', 'grid_4x4', '箍筋'],
+    ] as const);
 
   return (
     <>
@@ -64,12 +76,7 @@ export function ViewportHud() {
             <span className="material-symbols-outlined text-[16px]">videocam</span>
           </button>
           {/* View toggles */}
-          {([
-            ['showConcrete', 'deployed_code', '混凝土'],
-            ['showColumns', 'view_column', '柱'],
-            ['showLongitudinal', 'horizontal_rule', '纵筋'],
-            ['showStirrups', 'grid_4x4', '箍筋'],
-          ] as const).map(([k, icon, label]) => (
+          {layerToggles.map(([k, icon, label]) => (
             <button
               key={k}
               title={label}

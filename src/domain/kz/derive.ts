@@ -1,5 +1,21 @@
 // 框架柱 KZ — 派生计算 (22G101-1)
-import type { ColumnParams } from './types';
+import type { ColumnBarGroupKind, ColumnParams, ColumnStirrupSpec } from './types';
+import type { RebarBundle } from '../kl/types';
+
+export interface ColumnBarPosition {
+  x: number;
+  y: number;
+  kind: ColumnBarGroupKind;
+  bundle: RebarBundle;
+}
+
+export interface ColumnHoopLine {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  kind: 'outer' | 'crossTie';
+}
 
 export interface ColumnDerived {
   /** 柱总高 (mm) */
@@ -13,9 +29,29 @@ export interface ColumnDerived {
   /** 纵筋根数 (总) */
   totalBars: number;
   /** 纵筋坐标 (截面内 2D, mm) */
-  barPositions: { x: number; y: number }[];
+  barPositions: ColumnBarPosition[];
   /** 箍筋 X 坐标列表 (沿柱高, mm) */
   stirrupYs: number[];
+  /** 加密区箍筋 Y 坐标 */
+  denseStirrupYs: number[];
+  /** 非加密区箍筋 Y 坐标 */
+  sparseStirrupYs: number[];
+  /** b/h 方向箍筋肢数 */
+  stirrupLegs: { x: number; y: number };
+  /** 截面箍筋线条，用于剖面图表达 m×n */
+  hoopLines: ColumnHoopLine[];
+}
+
+function cloneBundle(bundle: RebarBundle, count = bundle.count): RebarBundle {
+  return { grade: bundle.grade, diameter: bundle.diameter, count };
+}
+
+function normalLegs(stirrup: ColumnStirrupSpec): { x: number; y: number } {
+  const fallback = stirrup.legs === 4 ? 3 : 2;
+  return {
+    x: Math.max(2, Math.min(8, Math.round(stirrup.legsX ?? fallback))),
+    y: Math.max(2, Math.min(8, Math.round(stirrup.legsY ?? fallback))),
+  };
 }
 
 /**
@@ -36,50 +72,51 @@ function calcDenseZone(params: ColumnParams): number {
  * 矩形柱: 4 角 + 各边均匀分布
  * 圆柱: 沿圆周均布
  */
-function calcBarPositions(params: ColumnParams): { x: number; y: number }[] {
-  const positions: { x: number; y: number }[] = [];
+function calcBarPositions(params: ColumnParams): ColumnBarPosition[] {
+  const positions: ColumnBarPosition[] = [];
 
   if (params.sectionType === 'circle') {
     const r = params.D / 2 - params.cover - params.longitudinal.diameter / 2;
     const n = params.longitudinal.count;
+    const bundle = cloneBundle(params.longitudinal, 1);
     for (let i = 0; i < n; i++) {
       const angle = (2 * Math.PI * i) / n - Math.PI / 2;
-      positions.push({ x: r * Math.cos(angle), y: r * Math.sin(angle) });
+      positions.push({ x: r * Math.cos(angle), y: r * Math.sin(angle), kind: 'corner', bundle });
     }
     return positions;
   }
 
   // 矩形柱
-  const halfW = params.b / 2 - params.cover - params.longitudinal.diameter / 2;
-  const halfH = params.h / 2 - params.cover - params.longitudinal.diameter / 2;
-  const n = params.longitudinal.count; // 每边根数(含角筋)
-  const perSide = Math.max(2, n); // 每边至少 2 根(角筋)
+  const mode = params.longitudinalMode ?? 'uniform';
+  const corner = cloneBundle(params.cornerBar ?? params.longitudinal, 1);
+  const uniformMid = Math.max(0, params.longitudinal.count - 2);
+  const bMid = cloneBundle(
+    params.bSideMidBar ?? params.longitudinal,
+    mode === 'grouped' ? Math.max(0, params.bSideMidBar?.count ?? uniformMid) : uniformMid,
+  );
+  const hMid = cloneBundle(
+    params.hSideMidBar ?? params.longitudinal,
+    mode === 'grouped' ? Math.max(0, params.hSideMidBar?.count ?? uniformMid) : uniformMid,
+  );
+  const maxDia = Math.max(corner.diameter, bMid.diameter, hMid.diameter);
+  const halfW = params.b / 2 - params.cover - maxDia / 2;
+  const halfH = params.h / 2 - params.cover - maxDia / 2;
 
   // 4 角
-  positions.push({ x: -halfW, y: halfH });
-  positions.push({ x: halfW, y: halfH });
-  positions.push({ x: halfW, y: -halfH });
-  positions.push({ x: -halfW, y: -halfH });
+  positions.push({ x: -halfW, y: halfH, kind: 'corner', bundle: corner });
+  positions.push({ x: halfW, y: halfH, kind: 'corner', bundle: corner });
+  positions.push({ x: halfW, y: -halfH, kind: 'corner', bundle: corner });
+  positions.push({ x: -halfW, y: -halfH, kind: 'corner', bundle: corner });
 
-  // 各边中间筋
-  if (perSide > 2) {
-    const midCount = perSide - 2;
-    // top edge
-    for (let i = 1; i <= midCount; i++) {
-      positions.push({ x: -halfW + (2 * halfW * i) / (midCount + 1), y: halfH });
-    }
-    // bottom edge
-    for (let i = 1; i <= midCount; i++) {
-      positions.push({ x: -halfW + (2 * halfW * i) / (midCount + 1), y: -halfH });
-    }
-    // left edge
-    for (let i = 1; i <= midCount; i++) {
-      positions.push({ x: -halfW, y: -halfH + (2 * halfH * i) / (midCount + 1) });
-    }
-    // right edge
-    for (let i = 1; i <= midCount; i++) {
-      positions.push({ x: halfW, y: -halfH + (2 * halfH * i) / (midCount + 1) });
-    }
+  for (let i = 1; i <= bMid.count; i++) {
+    const x = -halfW + (2 * halfW * i) / (bMid.count + 1);
+    positions.push({ x, y: halfH, kind: 'bMid', bundle: cloneBundle(bMid, 1) });
+    positions.push({ x, y: -halfH, kind: 'bMid', bundle: cloneBundle(bMid, 1) });
+  }
+  for (let i = 1; i <= hMid.count; i++) {
+    const y = -halfH + (2 * halfH * i) / (hMid.count + 1);
+    positions.push({ x: -halfW, y, kind: 'hMid', bundle: cloneBundle(hMid, 1) });
+    positions.push({ x: halfW, y, kind: 'hMid', bundle: cloneBundle(hMid, 1) });
   }
 
   return positions;
@@ -88,15 +125,16 @@ function calcBarPositions(params: ColumnParams): { x: number; y: number }[] {
 /**
  * 箍筋 Y 坐标列表 (沿柱高方向)
  */
-function calcStirrupYs(params: ColumnParams, denseBottom: number, denseTop: number): number[] {
-  const ys: number[] = [];
+function calcStirrupYs(params: ColumnParams, denseBottom: number, denseTop: number): { all: number[]; dense: number[]; sparse: number[] } {
+  const dense: number[] = [];
+  const sparse: number[] = [];
   const H = params.Hn;
   const { spacingDense, spacingSparse } = params.stirrup;
 
   // 底部加密区
   let y = spacingDense / 2;
   while (y < denseBottom) {
-    ys.push(y);
+    dense.push(y);
     y += spacingDense;
   }
 
@@ -104,18 +142,41 @@ function calcStirrupYs(params: ColumnParams, denseBottom: number, denseTop: numb
   y = denseBottom + spacingSparse / 2;
   const topStart = H - denseTop;
   while (y < topStart) {
-    ys.push(y);
+    sparse.push(y);
     y += spacingSparse;
   }
 
   // 顶部加密区
   y = topStart;
   while (y < H) {
-    ys.push(y);
+    dense.push(y);
     y += spacingDense;
   }
 
-  return ys;
+  return { all: [...dense, ...sparse].sort((a, b) => a - b), dense, sparse };
+}
+
+function calcHoopLines(params: ColumnParams): ColumnHoopLine[] {
+  const legs = normalLegs(params.stirrup);
+  const c = params.cover + params.stirrup.diameter / 2;
+  const halfW = (params.b - 2 * c) / 2;
+  const halfH = (params.h - 2 * c) / 2;
+  const lines: ColumnHoopLine[] = [
+    { x1: -halfW, y1: halfH, x2: halfW, y2: halfH, kind: 'outer' },
+    { x1: halfW, y1: halfH, x2: halfW, y2: -halfH, kind: 'outer' },
+    { x1: halfW, y1: -halfH, x2: -halfW, y2: -halfH, kind: 'outer' },
+    { x1: -halfW, y1: -halfH, x2: -halfW, y2: halfH, kind: 'outer' },
+  ];
+
+  for (let i = 1; i < legs.x - 1; i++) {
+    const x = -halfW + (2 * halfW * i) / (legs.x - 1);
+    lines.push({ x1: x, y1: halfH, x2: x, y2: -halfH, kind: 'crossTie' });
+  }
+  for (let i = 1; i < legs.y - 1; i++) {
+    const y = -halfH + (2 * halfH * i) / (legs.y - 1);
+    lines.push({ x1: -halfW, y1: y, x2: halfW, y2: y, kind: 'crossTie' });
+  }
+  return lines;
 }
 
 export function deriveColumn(params: ColumnParams): ColumnDerived {
@@ -124,7 +185,7 @@ export function deriveColumn(params: ColumnParams): ColumnDerived {
   const denseZoneTop = calcDenseZone(params);
   const sparseZone = Math.max(0, params.Hn - denseZoneBottom - denseZoneTop);
   const barPositions = calcBarPositions(params);
-  const stirrupYs = calcStirrupYs(params, denseZoneBottom, denseZoneTop);
+  const stirrupYGroups = calcStirrupYs(params, denseZoneBottom, denseZoneTop);
 
   return {
     totalHeight,
@@ -133,7 +194,11 @@ export function deriveColumn(params: ColumnParams): ColumnDerived {
     sparseZone,
     totalBars: barPositions.length,
     barPositions,
-    stirrupYs,
+    stirrupYs: stirrupYGroups.all,
+    denseStirrupYs: stirrupYGroups.dense,
+    sparseStirrupYs: stirrupYGroups.sparse,
+    stirrupLegs: normalLegs(params.stirrup),
+    hoopLines: calcHoopLines(params),
   };
 }
 
@@ -150,6 +215,10 @@ export function defaultColumn(): ColumnParams {
     concrete: 'C30',
     seismic: 2,
     longitudinal: { grade: 'HRB400', diameter: 25, count: 4 },
+    longitudinalMode: 'uniform',
+    cornerBar: { grade: 'HRB400', diameter: 25, count: 4 },
+    bSideMidBar: { grade: 'HRB400', diameter: 25, count: 2 },
+    hSideMidBar: { grade: 'HRB400', diameter: 25, count: 2 },
     stirrup: {
       grade: 'HRB400',
       diameter: 10,
@@ -157,6 +226,9 @@ export function defaultColumn(): ColumnParams {
       spacingSparse: 200,
       type: 'rect',
       legs: 4,
+      legsX: 3,
+      legsY: 3,
+      typeNo: 1,
     },
   };
 }

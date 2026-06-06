@@ -1,10 +1,16 @@
-import { Canvas } from '@react-three/fiber';
+import { Canvas, useThree } from '@react-three/fiber';
 import { OrbitControls, GizmoHelper, GizmoViewport, Grid, Environment } from '@react-three/drei';
 import { useMemo, useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { deriveColumn } from '../domain/kz/derive';
 import type { ColumnParams } from '../domain/kz/types';
 import { useColumnStore } from '../store/columnStore';
+
+const BAR_COLORS = {
+  corner: '#ef5350',
+  bMid: '#ffa726',
+  hMid: '#42a5f5',
+} as const;
 
 // 柱体混凝土
 function ColumnConcrete({ params, derived, show }: { params: ColumnParams; derived: ReturnType<typeof deriveColumn>; show: boolean }) {
@@ -32,25 +38,92 @@ function ColumnConcrete({ params, derived, show }: { params: ColumnParams; deriv
 function ColumnLongBars({ params, derived, show }: { params: ColumnParams; derived: ReturnType<typeof deriveColumn>; show: boolean }) {
   const bars = useMemo(() => {
     return derived.barPositions.map((pos, i) => {
-      const r = params.longitudinal.diameter / 2;
+      const r = pos.bundle.diameter / 2;
       const geo = new THREE.CylinderGeometry(r, r, params.Hn, 8);
       geo.translate(pos.x, params.Hn / 2, pos.y);
       return <mesh key={i} geometry={geo}>
-        <meshStandardMaterial color="#ef5350" metalness={0.7} roughness={0.35} envMapIntensity={1.2} />
+        <meshStandardMaterial color={BAR_COLORS[pos.kind]} metalness={0.7} roughness={0.35} envMapIntensity={1.2} />
       </mesh>;
     });
-  }, [derived.barPositions, params.longitudinal.diameter, params.Hn]);
+  }, [derived.barPositions, params.Hn]);
 
   if (!show) return null;
   return <>{bars}</>;
 }
 
 // 箍筋
+function buildRectLineGeometry(params: ColumnParams) {
+  const c = params.cover + params.stirrup.diameter / 2;
+  const halfW = (params.b - 2 * c) / 2;
+  const halfH = (params.h - 2 * c) / 2;
+  const d = params.stirrup.diameter;
+  const boxes: THREE.BufferGeometry[] = [];
+  for (const line of derivedLineFallback(params)) {
+    const len = Math.hypot(line.x2 - line.x1, line.y2 - line.y1);
+    const isVertical = Math.abs(line.x1 - line.x2) < 1e-6;
+    const g = isVertical
+      ? new THREE.BoxGeometry(d, len + d, d)
+      : new THREE.BoxGeometry(len + d, d, d);
+    g.translate((line.x1 + line.x2) / 2, (line.y1 + line.y2) / 2, 0);
+    boxes.push(g);
+  }
+  if (boxes.length === 0) {
+    const g = new THREE.BoxGeometry(halfW * 2 + d, d, d);
+    g.translate(0, halfH, 0);
+    boxes.push(g);
+  }
+  return mergeGeometries(boxes);
+}
+
+function derivedLineFallback(params: ColumnParams) {
+  const c = params.cover + params.stirrup.diameter / 2;
+  const halfW = (params.b - 2 * c) / 2;
+  const halfH = (params.h - 2 * c) / 2;
+  const legsX = Math.max(2, Math.round(params.stirrup.legsX ?? (params.stirrup.legs === 4 ? 3 : 2)));
+  const legsY = Math.max(2, Math.round(params.stirrup.legsY ?? (params.stirrup.legs === 4 ? 3 : 2)));
+  const lines = [
+    { x1: -halfW, y1: halfH, x2: halfW, y2: halfH },
+    { x1: halfW, y1: halfH, x2: halfW, y2: -halfH },
+    { x1: halfW, y1: -halfH, x2: -halfW, y2: -halfH },
+    { x1: -halfW, y1: -halfH, x2: -halfW, y2: halfH },
+  ];
+  for (let i = 1; i < legsX - 1; i++) {
+    const x = -halfW + (2 * halfW * i) / (legsX - 1);
+    lines.push({ x1: x, y1: halfH, x2: x, y2: -halfH });
+  }
+  for (let i = 1; i < legsY - 1; i++) {
+    const y = -halfH + (2 * halfH * i) / (legsY - 1);
+    lines.push({ x1: -halfW, y1: y, x2: halfW, y2: y });
+  }
+  return lines;
+}
+
+function ColumnStirrupInstances({ geometry, ys, color }: { geometry: THREE.BufferGeometry | null; ys: number[]; color: string }) {
+  const ref = useRef<THREE.InstancedMesh>(null);
+
+  useEffect(() => {
+    if (!ref.current) return;
+    const dummy = new THREE.Object3D();
+    ys.forEach((y, i) => {
+      dummy.position.set(0, y, 0);
+      dummy.rotation.set(Math.PI / 2, 0, 0);
+      dummy.updateMatrix();
+      ref.current!.setMatrixAt(i, dummy.matrix);
+    });
+    ref.current.instanceMatrix.needsUpdate = true;
+  }, [ys]);
+
+  if (!geometry || ys.length === 0) return null;
+  return (
+    <instancedMesh ref={ref} args={[geometry, undefined, ys.length]}>
+      <meshStandardMaterial color={color} metalness={0.65} roughness={0.4} envMapIntensity={1.0} />
+    </instancedMesh>
+  );
+}
+
 function ColumnStirrups({ params, derived, show }: { params: ColumnParams; derived: ReturnType<typeof deriveColumn>; show: boolean }) {
   const unitGeo = useMemo(() => {
     const c = params.cover + params.stirrup.diameter / 2;
-    const w = params.b - 2 * c;
-    const h = params.h - 2 * c;
     const r = params.stirrup.diameter / 2;
 
     if (params.sectionType === 'circle') {
@@ -58,52 +131,16 @@ function ColumnStirrups({ params, derived, show }: { params: ColumnParams; deriv
       return new THREE.TorusGeometry(outerR, r, 8, 32);
     }
 
-    // 矩形箍筋 — 用 4 个 box 拼接
-    const boxes: THREE.BufferGeometry[] = [];
-    const d = params.stirrup.diameter;
-    const hw = w / 2, hh = h / 2;
-    // top
-    const top = new THREE.BoxGeometry(w + d, d, d);
-    top.translate(0, hh, 0);
-    boxes.push(top);
-    // bottom
-    const bot = new THREE.BoxGeometry(w + d, d, d);
-    bot.translate(0, -hh, 0);
-    boxes.push(bot);
-    // left
-    const left = new THREE.BoxGeometry(d, h + d, d);
-    left.translate(-hw, 0, 0);
-    boxes.push(left);
-    // right
-    const right = new THREE.BoxGeometry(d, h + d, d);
-    right.translate(hw, 0, 0);
-    boxes.push(right);
+    return buildRectLineGeometry(params);
+  }, [params.sectionType, params.b, params.h, params.D, params.cover, params.stirrup.diameter, params.stirrup.legs, params.stirrup.legsX, params.stirrup.legsY]);
 
-    return mergeGeometries(boxes);
-  }, [params.sectionType, params.b, params.h, params.D, params.cover, params.stirrup.diameter]);
-
-  // Instanced mesh for all stirrups
-  const count = derived.stirrupYs.length;
-  const ref = useRef<THREE.InstancedMesh>(null);
-
-  useEffect(() => {
-    if (!ref.current) return;
-    const dummy = new THREE.Object3D();
-    derived.stirrupYs.forEach((y, i) => {
-      dummy.position.set(0, y, 0);
-      dummy.rotation.set(Math.PI / 2, 0, 0);
-      dummy.updateMatrix();
-      ref.current!.setMatrixAt(i, dummy.matrix);
-    });
-    ref.current.instanceMatrix.needsUpdate = true;
-  }, [derived.stirrupYs]);
-
-  if (!show || !unitGeo || count === 0) return null;
+  if (!show || !unitGeo || derived.stirrupYs.length === 0) return null;
 
   return (
-    <instancedMesh ref={ref} args={[unitGeo, undefined, count]}>
-      <meshStandardMaterial color="#78909c" metalness={0.65} roughness={0.4} envMapIntensity={1.0} />
-    </instancedMesh>
+    <>
+      <ColumnStirrupInstances geometry={unitGeo} ys={derived.sparseStirrupYs} color="#78909c" />
+      <ColumnStirrupInstances geometry={unitGeo} ys={derived.denseStirrupYs} color="#26c6da" />
+    </>
   );
 }
 
@@ -132,6 +169,34 @@ function mergeGeometries(geos: THREE.BufferGeometry[]): THREE.BufferGeometry {
   if (indices.length > 0) merged.setIndex(indices);
   merged.computeVertexNormals();
   return merged;
+}
+
+function CameraController({ center, camDist }: { center: [number, number, number]; camDist: number }) {
+  const { camera } = useThree();
+  const cmd = useColumnStore((s) => s.cameraCommand);
+  const clearCmd = useColumnStore((s) => s.setCameraCommand);
+
+  useEffect(() => {
+    if (!cmd) return;
+    const target = new THREE.Vector3(...center);
+    const pos = cmd === 'top'
+      ? new THREE.Vector3(center[0], camDist * 1.15, center[2])
+      : new THREE.Vector3(camDist * 0.5, center[1] * 1.2, camDist * 0.5);
+    const startPos = camera.position.clone();
+    const duration = 600;
+    const startTime = performance.now();
+    const animate = (time: number) => {
+      const t = Math.min((time - startTime) / duration, 1);
+      const ease = 1 - Math.pow(1 - t, 3);
+      camera.position.lerpVectors(startPos, pos, ease);
+      camera.lookAt(target);
+      if (t < 1) requestAnimationFrame(animate);
+    };
+    requestAnimationFrame(animate);
+    clearCmd(null);
+  }, [cmd, camera, center, camDist, clearCmd]);
+
+  return null;
 }
 
 export function ColumnScene() {
@@ -170,6 +235,7 @@ export function ColumnScene() {
         fadeStrength={1.5}
       />
 
+      <CameraController center={center} camDist={camDist} />
       <OrbitControls target={center} makeDefault enableDamping dampingFactor={0.1} />
       <GizmoHelper alignment="bottom-right" margin={[80, 80]}>
         <GizmoViewport axisColors={["#ef4444", "#22c55e", "#3b82f6"]} labelColor="white" />

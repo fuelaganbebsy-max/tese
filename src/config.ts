@@ -80,7 +80,7 @@ export const MEMBER_STATUS: Record<MemberType, 'ready' | 'dev' | 'planned'> = {
   L: 'dev',
   WKL: 'dev',
   XL: 'dev',
-  KZ: 'dev',
+  KZ: 'ready',
   QW: 'planned',
   LB: 'planned',
   AT: 'planned',

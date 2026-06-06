@@ -23,6 +23,11 @@ export function ChatBubble({ message, isStreaming }: Props) {
       <div className="flex justify-end">
         <div className="max-w-[85%] bg-blue-600/80 text-white rounded-xl rounded-tr-sm px-3 py-2 text-[13px] leading-relaxed shadow-md">
           {message.content}
+          {message.warning && (
+            <div className="mt-1.5 text-[11px] text-blue-50/80 border-t border-white/15 pt-1">
+              {message.warning}
+            </div>
+          )}
         </div>
       </div>
     );

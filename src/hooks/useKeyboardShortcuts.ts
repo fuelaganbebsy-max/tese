@@ -3,18 +3,30 @@ import { useBeamStore } from '../store/beamStore';
 import { useColumnStore } from '../store/columnStore';
 import { useMemberStore } from '../store/memberStore';
 
-interface ViewKeys {
+interface BeamViewKeys {
   showConcrete: boolean;
   showColumns: boolean;
   showLongitudinal: boolean;
   showStirrups: boolean;
 }
 
-const VIEW_TOGGLE: Record<string, keyof ViewKeys> = {
+interface ColumnViewKeys {
+  showConcrete: boolean;
+  showLongitudinal: boolean;
+  showStirrups: boolean;
+}
+
+const BEAM_VIEW_TOGGLE: Record<string, keyof BeamViewKeys> = {
   '1': 'showConcrete',
   '2': 'showColumns',
   '3': 'showLongitudinal',
   '4': 'showStirrups',
+};
+
+const COLUMN_VIEW_TOGGLE: Record<string, keyof ColumnViewKeys> = {
+  '1': 'showConcrete',
+  '2': 'showLongitudinal',
+  '3': 'showStirrups',
 };
 
 /**
@@ -44,8 +56,9 @@ export function useKeyboardShortcuts() {
       }
 
       // 1-4: toggle view layers
-      if (VIEW_TOGGLE[e.key]) {
-        const k = VIEW_TOGGLE[e.key];
+      const viewToggle = isBeam ? BEAM_VIEW_TOGGLE : COLUMN_VIEW_TOGGLE;
+      if (viewToggle[e.key]) {
+        const k = viewToggle[e.key];
         const current = store.getState().view;
         store.getState().setView({ [k]: !(current as any)[k] });
         return;

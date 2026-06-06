@@ -2,13 +2,16 @@ import { useState, useRef, useEffect } from 'react';
 import { useBeamStore } from '../store/beamStore';
 import { useColumnStore } from '../store/columnStore';
 import type { BeamParams, ConcreteGrade, RebarGrade, SeismicLevel, Span, HaunchSpec } from '../domain/kl/types';
-import type { ColumnParams, ColumnSectionType } from '../domain/kz/types';
+import type { ColumnParams, ColumnLongitudinalMode, ColumnSectionType } from '../domain/kz/types';
 import { useMemberStore } from '../store/memberStore';
 import { getMemberEntry } from '../memberRegistry';
 import { useAiStore } from './ai/aiStore';
 import { getProvider } from './ai/providers';
+import { densifiedZoneLength, laE } from '../domain/codes/22G101';
+import { maxTopBarsPerRow } from '../domain/codes/maxBarsPerRow';
 
 const COMMON_DIA = [6, 8, 10, 12, 14, 16, 18, 20, 22, 25, 28, 32];
+const STIRRUP_DIA = [6, 8, 10, 12];
 const GRADES: RebarGrade[] = ['HPB300', 'HRB400', 'HRB500'];
 const CONCRETES: ConcreteGrade[] = ['C25', 'C30', 'C35', 'C40', 'C45', 'C50'];
 const SEISMICS: SeismicLevel[] = [1, 2, 3, 4];
@@ -120,11 +123,13 @@ function BundleEditor({
   value,
   onChange,
   evenOnly = false,
+  diaOptions = COMMON_DIA,
 }: {
   label: string;
   value: { grade: RebarGrade; diameter: number; count: number };
   onChange: (b: { grade: RebarGrade; diameter: number; count: number }) => void;
   evenOnly?: boolean;
+  diaOptions?: readonly number[];
 }) {
   return (
     <div className="flex flex-col gap-1.5">
@@ -149,7 +154,7 @@ function BundleEditor({
           value={value.diameter}
           onChange={(e) => onChange({ ...value, diameter: Number(e.target.value) })}
         >
-          {COMMON_DIA.map((d) => (
+          {diaOptions.map((d) => (
             <option key={d} value={d}>⌀{d}</option>
           ))}
         </select>
@@ -402,6 +407,7 @@ function SpanEditor({
                 stirrup: { ...span.stirrup, grade: b.grade, diameter: b.diameter, legs: (b.count >= 4 ? 4 : 2) as 2 | 4 },
               })
             }
+            diaOptions={STIRRUP_DIA}
           />
           <div className="grid grid-cols-2 gap-2">
             <NumField
@@ -432,15 +438,305 @@ function SpanEditor({
 /* ---------- AI Copilot Panel ---------- */
 
 type LocalMsg = { role: 'user' | 'assistant'; content: string; error?: string };
+type AssistantMode = 'model' | 'knowledge' | 'optimize';
+
+type CopilotCommandResult = {
+  nextParams: BeamParams;
+  reply: string;
+};
+
+function summarizeBeam(params: BeamParams): string {
+  const firstSpan = params.spans[0];
+  return `当前 KL：${params.b}x${params.h}mm，${params.concrete}，抗震 ${params.seismic} 级，保护层 ${params.cover}mm；上部通筋 ${params.topThrough.count}Φ${params.topThrough.diameter} ${params.topThrough.grade}；首跨下部筋 ${firstSpan.bottom.count}Φ${firstSpan.bottom.diameter}，箍筋 Φ${firstSpan.stirrup.diameter}@${firstSpan.stirrup.spacingDense}/${firstSpan.stirrup.spacingSparse}。`;
+}
+
+function getOptimizationAdvice(params: BeamParams): string {
+  const firstSpan = params.spans[0];
+  const denseLen = densifiedZoneLength(params.h, params.seismic);
+  const topCapacity = maxTopBarsPerRow(params.b, params.topThrough.diameter, params.cover);
+  const bottomCapacity = maxBarsPerRow(
+    params.b,
+    params.cover,
+    firstSpan.stirrup.diameter,
+    firstSpan.bottom.diameter,
+    firstSpan.stirrup.legs
+  );
+  const topLae = laE(params.topThrough.grade, params.topThrough.diameter, params.concrete, params.seismic);
+  const bottomLae = laE(firstSpan.bottom.grade, firstSpan.bottom.diameter, params.concrete, params.seismic);
+  const issues: string[] = [];
+
+  if (params.topThrough.count > topCapacity) {
+    issues.push(`上部通筋 ${params.topThrough.count}Φ${params.topThrough.diameter} 超过当前梁宽 ${params.b}mm、保护层 ${params.cover}mm 下单排建议容量 ${topCapacity} 根。建议拆成两排，或减小直径、加宽梁截面，并同步复核净距。`);
+  } else {
+    issues.push(`上部通筋 ${params.topThrough.count}Φ${params.topThrough.diameter} 未超过单排建议容量 ${topCapacity} 根，但仍需结合支座负筋叠加区复核净距。`);
+  }
+
+  if (firstSpan.bottom.count > bottomCapacity) {
+    issues.push(`首跨下部筋 ${firstSpan.bottom.count}Φ${firstSpan.bottom.diameter} 超过按当前箍筋肢数估算的单排容量 ${bottomCapacity} 根。建议设置第二排底筋，或调整梁宽/钢筋直径。`);
+  } else {
+    issues.push(`首跨下部筋 ${firstSpan.bottom.count}Φ${firstSpan.bottom.diameter} 单排排布容量初判可行，建议继续检查跨中弯矩所需 As。`);
+  }
+
+  if (firstSpan.stirrup.spacingDense > 100 && params.seismic <= 2) {
+    issues.push(`当前抗震 ${params.seismic} 级，箍筋加密区间距 ${firstSpan.stirrup.spacingDense}mm 偏宽。建议优先采用 @100 或按设计计算进一步收紧，并按 22G101 梁端加密区构造复核。`);
+  }
+
+  if (firstSpan.stirrup.spacingSparse > Math.min(200, params.h / 2)) {
+    issues.push(`非加密区箍筋间距 ${firstSpan.stirrup.spacingSparse}mm 可能偏大；按常用构造宜同时受 200mm 和 h/2 控制，当前 h/2=${Math.round(params.h / 2)}mm。建议改为 @200 或更小。`);
+  }
+
+  if (firstSpan.stirrup.legs === 2 && params.b >= 350) {
+    issues.push(`梁宽 ${params.b}mm 时仍采用 2 肢箍，宽梁横向约束可能不足。建议评估改为 4 肢箍或复合箍。`);
+  }
+
+  if (params.cover < 25) {
+    issues.push(`保护层 ${params.cover}mm 偏小。建议普通梁不低于常用 25mm，并按环境类别、耐久性和设计说明取值。`);
+  }
+
+  const firstRow = Math.round(firstSpan.ln / 3);
+  const secondRow = Math.round(firstSpan.ln / 4);
+  return `优化建议已开启，我按现行 22G101 构造规则和 GB 50010 常用控制项，对当前模型做离线初审：\n\n当前模型：${summarizeBeam(params)}\n\n主要问题与建议：\n${issues.map((item, index) => `${index + 1}. ${item}`).join('\n')}\n\n关键构造取值：\n1. 梁端箍筋加密区长度：抗震 ${params.seismic} 级，取 ${denseLen}mm。\n2. 上部通筋抗震锚固长度 laE：${topLae}mm；下部筋 laE：${bottomLae}mm。\n3. 支座负筋伸出：第一排 ln/3=${firstRow}mm，第二排 ln/4=${secondRow}mm。\n\n可直接执行的修改建议示例：\n- “箍筋加密间距改为100”\n- “箍筋改为4肢”\n- “梁宽改为350”\n- “混凝土改为C35”\n\n以上为构造和模型一致性初审，最终仍需结合内力计算书、设计总说明、22G101 节点和 GB 50010 条文复核。`;
+}
+
+function getOfflineAnswer(text: string, params: BeamParams, optimMode: boolean): string {
+  const compact = text.replace(/\s+/g, '').toLowerCase();
+  const firstSpan = params.spans[0];
+  const denseLen = Math.max(500, params.h * 1.5);
+  const current = summarizeBeam(params);
+  const ln = firstSpan.ln;
+
+  if (/负筋|負筋|支座筋|支座钢筋|支座鋼筋/.test(compact) && /第一排|一排|第二排|二排|伸出|伸入|长度|長度|多少/.test(compact)) {
+    const firstRow = Math.round(ln / 3);
+    const secondRow = Math.round(ln / 4);
+    return `按常用 22G101 梁支座负筋构造，支座负筋从支座边向跨内伸出：第一排取 ln/3，第二排取 ln/4。\n\n当前净跨 ln = ${ln}mm，所以：\n第一排负筋伸出长度 = ${firstRow}mm；\n第二排负筋伸出长度 = ${secondRow}mm。\n\n如果是中间支座，两侧相邻跨不等时，通常分别按相邻跨净跨取值，并以设计说明和图集节点为准。`;
+  }
+
+  if (/加密区|加密區|箍筋.*范围|箍筋.*範圍|箍筋.*长度|箍筋.*長度/.test(compact)) {
+    return `${current}\n\n框架梁箍筋加密区通常从支座边起算，按抗震构造取值时常用控制项是梁高倍数和 500mm 的较大值。按当前梁高 ${params.h}mm 估算，加密区长度可先按 max(1.5h, 500) = ${denseLen}mm 控制，当前加密间距为 ${firstSpan.stirrup.spacingDense}mm，非加密区间距为 ${firstSpan.stirrup.spacingSparse}mm。\n\n实际出图前还需要结合抗震等级、梁端塑性铰区、设计说明和 22G101/GB 50010 的具体条文复核。`;
+  }
+
+  if (/锚固|錨固|lae|la|弯锚|彎錨/.test(compact)) {
+    return `${current}\n\n锚固长度需要由钢筋等级、直径、混凝土强度、抗震等级共同确定。当前上部通筋为 ${params.topThrough.grade} Φ${params.topThrough.diameter}，混凝土 ${params.concrete}，抗震 ${params.seismic} 级；软件当前展示的 laE 可作为本模型的计算参考值。\n\n构造判断时重点看三件事：支座宽度是否满足直锚，直锚不足时是否采用弯锚，弯折段和水平段是否满足图集构造。`;
+  }
+
+  if (/通长筋|通長筋|通常钢筋|通常鋼筋|贯通筋|貫通筋|架立筋|上部.*架立筋|区别|差别|差異/.test(compact)) {
+    return `通长筋/贯通筋是沿梁长连续布置、参与梁端和跨中受力及构造连续性的钢筋；架立筋主要用于固定箍筋、形成钢筋骨架，通常不作为主要受力钢筋控制。\n\n在当前模型里，“上部通筋”会贯穿整根梁并影响 3D 显示和 BOM；支座负筋、下部筋则按各跨或支座区域分别统计。`;
+  }
+
+  if (/保护层|保護層|cover/.test(compact)) {
+    return `${current}\n\n保护层厚度影响钢筋净距、可排布根数、耐久性和防火性能。当前保护层为 ${params.cover}mm。一般不能只为了排筋方便随意减小保护层，出图时应按环境类别、构件类型和设计说明取值。`;
+  }
+
+  if (/工程量|重量|bom|清单|统计|統計/.test(compact)) {
+    return `BOM 会按当前模型参数重新统计各类钢筋的规格、长度、数量和重量。你可以用自然语言直接改参数，例如“上部通筋改为2根，直径不变”或“箍筋加密间距改为100”，工程量会随模型同步刷新。`;
+  }
+
+  if (/优化|優化|建议|建議|合理|检查|檢查|诊断|診斷|不合理|问题|問題/.test(compact) || optimMode) {
+    return getOptimizationAdvice(params);
+  }
+
+  return `${current}\n\n我现在处于离线问答状态，不需要配置模型 API Key。可以回答当前构件相关的常见开放问题，也可以直接执行参数修改。\n\n你可以继续问：箍筋加密区怎么取、锚固长度怎么看、通长筋和架立筋区别、当前配筋是否合理；也可以说“梁高改为650”“混凝土改为C35”“下部钢筋改为4根直径22”。`;
+}
+
+function cnNumberToDigit(text: string): number | undefined {
+  const map: Record<string, number> = {
+    一: 1,
+    二: 2,
+    两: 2,
+    三: 3,
+    四: 4,
+    五: 5,
+    六: 6,
+    七: 7,
+    八: 8,
+    九: 9,
+    十: 10,
+  };
+  return map[text];
+}
+
+function firstNumber(text: string): number | undefined {
+  const digit = text.match(/\d+(?:\.\d+)?/);
+  if (digit) return Number(digit[0]);
+  const cn = text.match(/[一二两三四五六七八九十]/);
+  return cn ? cnNumberToDigit(cn[0]) : undefined;
+}
+
+function extractCount(text: string): number | undefined {
+  const match = text.match(/(\d+|[一二两三四五六七八九十])\s*(?:根|支|肢)/);
+  if (!match) return undefined;
+  return /^\d/.test(match[1]) ? Number(match[1]) : cnNumberToDigit(match[1]);
+}
+
+function extractDiameter(text: string): number | undefined {
+  if (/直径不变|直徑不變|直径保持|直徑保持/.test(text)) return undefined;
+  const match =
+    text.match(/(?:直径|直徑|dia|diameter|[dDΦφØø])\s*(?:为|改为|=|:|：)?\s*(\d+)/) ??
+    text.match(/(\d+)\s*(?:mm)?\s*(?:钢筋|鋼筋|筋)/);
+  return match ? Number(match[1]) : undefined;
+}
+
+function extractGrade(text: string): RebarGrade | undefined {
+  const match = text.toUpperCase().match(/\b(HPB300|HRB400|HRB500)\b/);
+  return match?.[1] as RebarGrade | undefined;
+}
+
+function extractConcrete(text: string): ConcreteGrade | undefined {
+  const match = text.toUpperCase().match(/\bC(25|30|35|40|45|50)\b/);
+  return match ? (`C${match[1]}` as ConcreteGrade) : undefined;
+}
+
+function extractSeismic(text: string): SeismicLevel | undefined {
+  const match = text.match(/抗震\s*(?:等级|等級)?\s*(?:改为|调整为|设为|为|=|:|：)?\s*([一二三四1234])/);
+  if (!match) return undefined;
+  const raw = match[1];
+  const value = /^\d$/.test(raw) ? Number(raw) : cnNumberToDigit(raw);
+  return value && value >= 1 && value <= 4 ? (value as SeismicLevel) : undefined;
+}
+
+function extractMmValue(text: string, keywords: string[]): number | undefined {
+  for (const keyword of keywords) {
+    const idx = text.indexOf(keyword);
+    if (idx >= 0) {
+      return firstNumber(text.slice(idx));
+    }
+  }
+  return undefined;
+}
+
+function parseCopilotCommand(text: string, params: BeamParams): CopilotCommandResult | null {
+  const compact = text.replace(/\s+/g, '');
+  const isQuestion = /[?？]|怎么|如何|为何|为什么|為何|為什麼|解释|說明|说明|区别|差别|差異|是什么|是什麼|确定|確定|范围|範圍|多少|几个|幾個/.test(compact);
+  if (isQuestion && !/改|修改|调整|調整|设为|設為|设置|設定|变为|變為|改为|改成|设成|換成|换成|采用|取为|取成|应用|套用|增加|减少|增大|减小|=/.test(compact)) {
+    return null;
+  }
+
+  const hasCommandIntent = /改|修改|调整|調整|设为|設為|设置|設定|变为|變為|改为|改成|设成|換成|换成|采用|取为|取成|应用|套用|增加|减少|增大|减小|=/.test(compact);
+  if (!hasCommandIntent) return null;
+
+  const actions: string[] = [];
+  let handled = false;
+  let next: BeamParams = params;
+
+  const update = (patch: Partial<BeamParams>) => {
+    next = { ...next, ...patch };
+    handled = true;
+  };
+
+  const count = extractCount(compact);
+  const diameter = extractDiameter(compact);
+  const grade = extractGrade(compact);
+
+  if (
+    /上部|顶部|通筋|贯通筋|貫通筋/.test(compact) &&
+    !/支座|负筋|負筋|区别|差别|差異|怎么|如何|为什么|為什麼|解释|說明|说明/.test(compact) &&
+    (count !== undefined || diameter !== undefined || grade !== undefined)
+  ) {
+    const current = next.topThrough;
+    update({
+      topThrough: {
+        ...current,
+        count: count ?? current.count,
+        diameter: diameter ?? current.diameter,
+        grade: grade ?? current.grade,
+      },
+    });
+    actions.push(`上部通筋已调整为 ${count ?? current.count} 根 HRB/HPB 等级 ${grade ?? current.grade}，直径 ${diameter ?? current.diameter}mm`);
+  }
+
+  if (
+    /下部|底部|底筋/.test(compact) &&
+    !/区别|差别|差異|怎么|如何|为什么|為什麼|解释|說明|说明/.test(compact) &&
+    (count !== undefined || diameter !== undefined || grade !== undefined)
+  ) {
+    next = {
+      ...next,
+      spans: next.spans.map((span) => ({
+        ...span,
+        bottom: {
+          ...span.bottom,
+          count: count ?? span.bottom.count,
+          diameter: diameter ?? span.bottom.diameter,
+          grade: grade ?? span.bottom.grade,
+        },
+      })),
+    };
+    handled = true;
+    actions.push(`下部纵筋已应用到全部跨：${count ?? next.spans[0].bottom.count} 根，直径 ${diameter ?? next.spans[0].bottom.diameter}mm`);
+  }
+
+  if (/箍筋|箍/.test(compact) && !/怎么|如何|为什么|為什麼|解释|說明|说明|范围|範圍|确定|確定/.test(compact)) {
+    const dense = extractMmValue(compact, ['加密间距', '加密区间距', '加密']);
+    const sparse = extractMmValue(compact, ['非加密间距', '非加密区间距', '普通间距', '间距']);
+    const legs = /四肢|4肢|4支/.test(compact) ? 4 : /两肢|二肢|2肢|2支/.test(compact) ? 2 : undefined;
+    if (diameter === undefined && grade === undefined && dense === undefined && sparse === undefined && legs === undefined) {
+      return null;
+    }
+    next = {
+      ...next,
+      spans: next.spans.map((span) => ({
+        ...span,
+        stirrup: {
+          ...span.stirrup,
+          diameter: diameter ?? span.stirrup.diameter,
+          grade: grade ?? span.stirrup.grade,
+          spacingDense: dense ?? span.stirrup.spacingDense,
+          spacingSparse: sparse ?? span.stirrup.spacingSparse,
+          legs: (legs ?? span.stirrup.legs) as 2 | 4,
+        },
+      })),
+    };
+    handled = true;
+    actions.push('箍筋参数已应用到全部跨');
+  }
+
+  const width = extractMmValue(compact, ['梁宽', '宽度', 'b=']);
+  if (width !== undefined) {
+    update({ b: width });
+    actions.push(`梁宽 b 已改为 ${width}mm`);
+  }
+
+  const height = extractMmValue(compact, ['梁高', '高度', 'h=']);
+  if (height !== undefined) {
+    update({ h: height });
+    actions.push(`梁高 h 已改为 ${height}mm`);
+  }
+
+  const cover = extractMmValue(compact, ['保护层', '保護層']);
+  if (cover !== undefined) {
+    update({ cover });
+    actions.push(`保护层厚度已改为 ${cover}mm`);
+  }
+
+  const concrete = extractConcrete(compact);
+  if (concrete) {
+    update({ concrete });
+    actions.push(`混凝土强度等级已改为 ${concrete}`);
+  }
+
+  const seismic = extractSeismic(compact);
+  if (seismic) {
+    update({ seismic });
+    actions.push(`抗震等级已改为 ${seismic} 级`);
+  }
+
+  if (!handled) return null;
+
+  return {
+    nextParams: next,
+    reply: `已执行：${actions.join('；')}。模型与工程量已同步刷新。`,
+  };
+}
 
 function AiCopilot() {
-  const [optimMode, setOptimMode] = useState(false);
+  const [assistantMode, setAssistantMode] = useState<AssistantMode>('model');
   const [input, setInput] = useState('');
   const [msgs, setMsgs] = useState<LocalMsg[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const params = useBeamStore((s) => s.params);
+  const setParams = useBeamStore((s) => s.setParams);
   const apiKeys = useAiStore((s) => s.apiKeys);
   const activeProviderId = useAiStore((s) => s.activeProviderId);
   const activeModel = useAiStore((s) => s.activeModel);
@@ -449,30 +745,58 @@ function AiCopilot() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [msgs]);
 
-  const handleToggle = () => {
-    const next = !optimMode;
-    setOptimMode(next);
-    if (next && msgs.length === 0) {
-      setMsgs([{ role: 'assistant', content: '已加载当前构件参数，可以针对该配筋方案提问。' }]);
+  const handleModeChange = (mode: AssistantMode) => {
+    setAssistantMode(mode);
+    if (mode === 'optimize') {
+      setMsgs([{ role: 'assistant', content: getOptimizationAdvice(params) }]);
+      return;
     }
+    setMsgs([]);
   };
 
   const sendMessage = async () => {
     const text = input.trim();
     if (!text || isStreaming) return;
     setInput('');
+    const lastUserQuestion = [...msgs].reverse().find((m) => m.role === 'user')?.content;
+    const answerText =
+      /直接回答|回答我的问题|回答我的問題|不是这个|不是這個|没回答|沒有回答/.test(text) && lastUserQuestion
+        ? lastUserQuestion
+        : text;
+
+    const localCommand = assistantMode === 'model' ? parseCopilotCommand(answerText, params) : null;
+    if (localCommand) {
+      setParams(() => localCommand.nextParams);
+      setMsgs((prev) => [...prev, { role: 'user', content: text }, { role: 'assistant', content: localCommand.reply }]);
+      return;
+    }
 
     const history = msgs.map((m) => ({ role: m.role, content: m.content }));
     history.push({ role: 'user', content: text });
     setMsgs((prev) => [...prev, { role: 'user', content: text }, { role: 'assistant', content: '' }]);
     setIsStreaming(true);
 
-    const systemPrompt = optimMode
-      ? `你是资深建筑结构工程师。当前3D模型（框架梁KL）参数如下：\n\`\`\`json\n${JSON.stringify(params, null, 2)}\n\`\`\`\n\n请基于以上参数，结合22G101图集和GB50010规范，回答用户问题并给出优化建议。`
-      : '你是资深建筑结构工程师，精通22G101平法图集和GB50010等规范，回答结构工程相关问题。';
+    const systemPrompt = assistantMode === 'optimize'
+      ? `你是资深建筑结构工程师，任务是对当前3D框架梁 KL 模型做规范与图集初审。当前参数如下：\n\`\`\`json\n${JSON.stringify(params, null, 2)}\n\`\`\`\n\n回答要求：\n1. 必须基于现行 22G101 图集构造规则和 GB 50010 常用控制项指出模型中可能不合理的地方。\n2. 每条建议都要包含：问题、判断依据或计算值、修改意见。\n3. 重点检查：纵筋单排净距与排布容量、支座负筋伸出长度、锚固 laE、箍筋加密区长度、箍筋加密/非加密间距、箍筋肢数、保护层、材料等级与抗震等级匹配。\n4. 可以给出可直接执行的自然语言修改命令，例如“箍筋加密间距改为100”“梁宽改为350”。\n5. 不要只泛泛提醒复核；如果参数足够，必须给出当前模型的具体数值判断。`
+      : assistantMode === 'knowledge'
+      ? '你是资深建筑结构工程师，精通22G101平法图集、GB50010和常见施工构造。请做专业知识拓展，解释概念、构造依据、适用场景和注意事项，不要修改模型参数。'
+      : '你是模型交互助手。优先把用户自然语言转换为当前钢筋模型参数修改；无法修改时，再简要说明可执行的命令格式。';
 
     const provider = getProvider(activeProviderId);
-    if (!provider || !apiKeys[activeProviderId]) { setIsStreaming(false); return; }
+    if (!provider || !apiKeys[activeProviderId]) {
+      setMsgs((prev) => {
+        const next = [...prev];
+        next[next.length - 1] = {
+          role: 'assistant',
+          content: assistantMode === 'optimize'
+            ? getOptimizationAdvice(params)
+            : getOfflineAnswer(answerText, params, false),
+        };
+        return next;
+      });
+      setIsStreaming(false);
+      return;
+    }
 
     try {
       let full = '';
@@ -506,29 +830,28 @@ function AiCopilot() {
     <div className="flex-1 flex flex-col min-h-0">
       {/* Header */}
       <div className="px-4 py-2 border-b border-white/5 flex items-center justify-between sticky top-0 bg-surface-container-high/90 backdrop-blur-md z-10">
-        <div className="flex items-center gap-2">
-          <span className="material-symbols-outlined text-primary-container text-[18px]">smart_toy</span>
-          <span className="font-body-sm text-body-sm font-medium text-on-surface">AI 结构助手</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className={`text-[11px] transition-colors ${optimMode ? 'text-primary-fixed-dim' : 'text-on-surface-variant/50'}`}>
-            优化建议
-          </span>
-          <button
-            role="switch"
-            aria-checked={optimMode}
-            onClick={handleToggle}
-            title={optimMode ? '关闭优化建议模式' : '开启后可针对当前构件提问'}
-            className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-              optimMode ? 'bg-primary-fixed-dim' : 'bg-white/20'
-            }`}
-          >
-            <span
-              className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-md transition-transform duration-200 ease-in-out ${
-                optimMode ? 'translate-x-4' : 'translate-x-0'
-              }`}
-            />
-          </button>
+        <div className="flex w-full items-center gap-1 rounded-full border border-white/10 bg-surface-container-lowest/70 p-0.5">
+          {([
+            ['model', '模型交互'],
+            ['knowledge', '专业知识拓展'],
+            ['optimize', '优化建议'],
+          ] as const).map(([mode, label]) => {
+            const active = assistantMode === mode;
+            return (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => handleModeChange(mode)}
+                className={`flex-1 rounded-full px-2.5 py-1 text-[11px] transition-all ${
+                  active
+                    ? 'bg-primary-fixed-dim text-on-primary shadow-[0_0_12px_rgba(0,218,243,0.25)]'
+                    : 'text-on-surface-variant/60 hover:text-on-surface hover:bg-white/5'
+                }`}
+              >
+                {label}
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -536,19 +859,21 @@ function AiCopilot() {
       <div className="flex-1 p-3 overflow-y-auto flex flex-col gap-3">
         {msgs.length === 0 && (
           <div className="flex-1 flex items-center justify-center py-8">
-            <p className="text-[12px] text-on-surface-variant/40 text-center leading-relaxed">
-              开启「优化建议」后<br />可针对当前构件提问
+            <p className="text-[18px] text-on-surface-variant/40 text-center leading-relaxed px-4">
+              {assistantMode === 'model' && '输入自然语言修改模型参数'}
+              {assistantMode === 'knowledge' && '提问平法、规范和构造知识'}
+              {assistantMode === 'optimize' && '切换到优化建议后会生成当前模型诊断'}
             </p>
           </div>
         )}
         {msgs.map((msg, i) => (
           <div key={i} className={`flex gap-2 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
             {msg.role === 'assistant' && (
-              <div className="w-5 h-5 rounded-full bg-primary-container/20 flex items-center justify-center shrink-0 border border-primary-container/30 mt-0.5">
-                <span className="material-symbols-outlined text-primary-container" style={{ fontSize: '12px' }}>auto_awesome</span>
+              <div className="w-8 h-8 rounded-full bg-primary-container/20 flex items-center justify-center shrink-0 border border-primary-container/30 mt-0.5">
+                <span className="material-symbols-outlined text-primary-container" style={{ fontSize: '20px' }}>auto_awesome</span>
               </div>
             )}
-            <div className={`max-w-[85%] rounded-lg px-2.5 py-2 text-[12px] leading-relaxed ${
+            <div className={`max-w-[92%] rounded-lg px-3 py-2.5 text-[24px] leading-relaxed whitespace-pre-wrap break-words ${
               msg.role === 'user'
                 ? 'bg-blue-600/80 text-white rounded-tr-sm'
                 : 'bg-surface-container-highest/50 border border-white/5 text-on-surface-variant rounded-tl-sm'
@@ -566,21 +891,36 @@ function AiCopilot() {
 
       {/* Input */}
       <div className="border-t border-white/5 bg-surface-container-highest/20 shrink-0">
+        <div className="px-3 pt-2 flex items-center gap-1.5 text-[20px] text-on-surface-variant/60">
+          <span className="material-symbols-outlined text-[22px] text-primary-fixed-dim">bolt</span>
+          <span>
+            {assistantMode === 'model' && '模型交互模式'}
+            {assistantMode === 'knowledge' && '专业知识拓展模式'}
+            {assistantMode === 'optimize' && '优化建议模式'}
+            {!apiKeys[activeProviderId] && '，离线可用'}
+          </span>
+        </div>
         <div className="p-3 relative">
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
             disabled={isStreaming}
-            className="w-full bg-surface-container-lowest border border-white/10 rounded-full py-2 pl-4 pr-10 text-body-sm font-body-sm text-on-surface focus:outline-none focus:border-primary-fixed-dim focus:ring-1 focus:ring-primary-fixed-dim transition-colors placeholder:text-on-surface-variant/40 disabled:opacity-50"
-            placeholder={optimMode ? '针对当前构件提问…' : '输入问题…'}
+            className="w-full bg-surface-container-lowest border border-white/10 rounded-full py-3 pl-4 pr-12 text-[24px] text-on-surface focus:outline-none focus:border-primary-fixed-dim focus:ring-1 focus:ring-primary-fixed-dim transition-colors placeholder:text-on-surface-variant/40 disabled:opacity-50"
+            placeholder={
+              assistantMode === 'model'
+                ? '例如：梁高改为650...'
+                : assistantMode === 'knowledge'
+                ? '例如：箍筋加密区怎么取...'
+                : '针对当前构件提问...'
+            }
           />
           <button
             onClick={sendMessage}
             disabled={isStreaming || !input.trim()}
-            className="absolute right-5 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-primary-container/10 flex items-center justify-center text-primary-container hover:bg-primary-container/20 transition-colors disabled:opacity-30"
+            className="absolute right-5 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-primary-container/10 flex items-center justify-center text-primary-container hover:bg-primary-container/20 transition-colors disabled:opacity-30"
           >
-            <span className="material-symbols-outlined text-[16px]">send</span>
+            <span className="material-symbols-outlined text-[24px]">send</span>
           </button>
         </div>
       </div>
@@ -595,10 +935,21 @@ const SECTION_TYPES: { value: ColumnSectionType; label: string }[] = [
   { value: 'circle', label: '圆形' },
 ];
 
+const COLUMN_LONGITUDINAL_MODES: { value: ColumnLongitudinalMode; label: string }[] = [
+  { value: 'uniform', label: '全部同配' },
+  { value: 'grouped', label: '分组配筋' },
+];
+
 export function ColumnParamContent() {
   const params = useColumnStore((s) => s.params);
   const setParams = useColumnStore((s) => s.setParams);
   const update = (patch: Partial<ColumnParams>) => setParams((p) => ({ ...p, ...patch }));
+  const longitudinalMode = params.longitudinalMode ?? 'uniform';
+  const cornerBar = params.cornerBar ?? { ...params.longitudinal, count: 4 };
+  const bSideMidBar = params.bSideMidBar ?? { ...params.longitudinal, count: Math.max(0, params.longitudinal.count - 2) };
+  const hSideMidBar = params.hSideMidBar ?? { ...params.longitudinal, count: Math.max(0, params.longitudinal.count - 2) };
+  const legsX = params.stirrup.legsX ?? (params.stirrup.legs === 4 ? 3 : 2);
+  const legsY = params.stirrup.legsY ?? (params.stirrup.legs === 4 ? 3 : 2);
 
   return (
     <div className="flex-1 overflow-y-auto flex flex-col divide-y divide-white/10">
@@ -689,6 +1040,21 @@ export function ColumnParamContent() {
         {/* Longitudinal */}
         <div className="space-y-3">
           <h4 className="font-body-sm text-body-sm font-medium text-on-surface font-bold">纵筋</h4>
+          <div className="flex gap-2">
+            {COLUMN_LONGITUDINAL_MODES.map((mode) => (
+              <button
+                key={mode.value}
+                onClick={() => update({ longitudinalMode: mode.value })}
+                className={`flex-1 py-1.5 rounded border text-[11px] font-mono transition-colors ${
+                  longitudinalMode === mode.value
+                    ? 'bg-primary-fixed-dim/15 border-primary-fixed-dim/50 text-primary-fixed-dim font-medium'
+                    : 'bg-surface-container-lowest border-white/10 text-on-surface-variant hover:bg-white/5'
+                }`}
+              >
+                {mode.label}
+              </button>
+            ))}
+          </div>
           <div className="grid grid-cols-3 gap-2">
             <SelectField
               label="等级"
@@ -705,6 +1071,37 @@ export function ColumnParamContent() {
             />
             <NumField label="每边根数" value={params.longitudinal.count} onChange={(v) => update({ longitudinal: { ...params.longitudinal, count: v } })} step={1} min={2} max={8} />
           </div>
+          {longitudinalMode === 'grouped' && params.sectionType === 'rect' && (
+            <div className="space-y-3 pl-2 border-l-2 border-primary-fixed-dim/30">
+              <div className="grid grid-cols-3 gap-2">
+                <SelectField
+                  label="角筋直径"
+                  value={cornerBar.diameter}
+                  options={COMMON_DIA as unknown as number[]}
+                  onChange={(v) => update({ cornerBar: { ...cornerBar, diameter: v, grade: params.longitudinal.grade, count: 4 } })}
+                  fmt={(v) => `⌀${v}`}
+                />
+                <NumField label="b边中部/边" value={bSideMidBar.count} onChange={(v) => update({ bSideMidBar: { ...bSideMidBar, grade: params.longitudinal.grade, count: v } })} step={1} min={0} max={8} />
+                <SelectField
+                  label="b边直径"
+                  value={bSideMidBar.diameter}
+                  options={COMMON_DIA as unknown as number[]}
+                  onChange={(v) => update({ bSideMidBar: { ...bSideMidBar, grade: params.longitudinal.grade, diameter: v } })}
+                  fmt={(v) => `⌀${v}`}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <NumField label="h边中部/边" value={hSideMidBar.count} onChange={(v) => update({ hSideMidBar: { ...hSideMidBar, grade: params.longitudinal.grade, count: v } })} step={1} min={0} max={8} />
+                <SelectField
+                  label="h边直径"
+                  value={hSideMidBar.diameter}
+                  options={COMMON_DIA as unknown as number[]}
+                  onChange={(v) => update({ hSideMidBar: { ...hSideMidBar, grade: params.longitudinal.grade, diameter: v } })}
+                  fmt={(v) => `⌀${v}`}
+                />
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="divider-gradient" />
@@ -722,17 +1119,31 @@ export function ColumnParamContent() {
             <SelectField
               label="直径"
               value={params.stirrup.diameter}
-              options={COMMON_DIA as unknown as number[]}
+              options={STIRRUP_DIA as unknown as number[]}
               onChange={(v) => update({ stirrup: { ...params.stirrup, diameter: v } })}
               fmt={(v) => `⌀${v}`}
             />
             <NumField label="加密间距" value={params.stirrup.spacingDense} onChange={(v) => update({ stirrup: { ...params.stirrup, spacingDense: v } })} step={25} min={50} max={200} unit="mm" />
             <NumField label="非加密间距" value={params.stirrup.spacingSparse} onChange={(v) => update({ stirrup: { ...params.stirrup, spacingSparse: v } })} step={25} min={50} max={400} unit="mm" />
             <SelectField
-              label="肢数"
-              value={params.stirrup.legs}
-              options={[2, 4]}
-              onChange={(v) => update({ stirrup: { ...params.stirrup, legs: v as 2 | 4 } })}
+              label="类型编号"
+              value={params.stirrup.typeNo ?? 1}
+              options={[1, 2, 3, 4]}
+              onChange={(v) => update({ stirrup: { ...params.stirrup, typeNo: v as 1 | 2 | 3 | 4 } })}
+              fmt={(v) => `类型${v}`}
+            />
+            <SelectField
+              label="m 肢(b向)"
+              value={legsX}
+              options={[2, 3, 4, 5, 6]}
+              onChange={(v) => update({ stirrup: { ...params.stirrup, legsX: v, legs: (v > 2 || legsY > 2 ? 4 : 2) as 2 | 4 } })}
+              fmt={(v) => `${v}肢`}
+            />
+            <SelectField
+              label="n 肢(h向)"
+              value={legsY}
+              options={[2, 3, 4, 5, 6]}
+              onChange={(v) => update({ stirrup: { ...params.stirrup, legsY: v, legs: (legsX > 2 || v > 2 ? 4 : 2) as 2 | 4 } })}
               fmt={(v) => `${v}肢`}
             />
             <SelectField

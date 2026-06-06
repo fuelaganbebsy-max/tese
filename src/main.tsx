@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { lazy, Suspense, useState } from 'react';
 import ReactDOM from 'react-dom/client';
-import App from './App';
 import { LandingPage } from './ui/LandingPage';
 import './index.css';
+
+const App = lazy(() => import('./App'));
 
 // 防止旧 localStorage 数据导致白屏：版本不匹配或数据损坏时清除
 try {
@@ -43,7 +44,11 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { err
 function Root() {
   const [showApp, setShowApp] = useState(false);
   return showApp
-    ? <App onBack={() => setShowApp(false)} />
+    ? (
+      <Suspense fallback={<div className="h-screen w-screen bg-background" />}>
+        <App onBack={() => setShowApp(false)} />
+      </Suspense>
+    )
     : <LandingPage onEnter={() => setShowApp(true)} />;
 }
 

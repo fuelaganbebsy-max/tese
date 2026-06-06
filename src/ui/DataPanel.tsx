@@ -49,12 +49,12 @@ function ColumnSectionView() {
   const innerPad = 14;
   const scale = (W - innerPad * 2) / dim;
   const c = params.cover * scale;
-  const dia = params.longitudinal.diameter * scale;
-
-  const x0 = innerPad + c;
-  const x1 = W - innerPad - c;
-  const y0 = innerPad + c;
-  const y1 = H - innerPad - c;
+  const toSvgX = (x: number) => innerPad + (x + params.b / 2) * scale;
+  const toSvgY = (y: number) => innerPad + (params.h / 2 - y) * scale;
+  const cornerBars = derived.barPositions.filter((pos) => pos.kind === 'corner');
+  const topLeftBar = cornerBars.reduce((best, pos) => (
+    !best || pos.x < best.x || (pos.x === best.x && pos.y > best.y) ? pos : best
+  ), undefined as (typeof cornerBars)[number] | undefined);
 
   return (
     <div
@@ -77,7 +77,9 @@ function ColumnSectionView() {
         <h3 className="font-body-md text-body-md font-medium text-on-surface font-bold">
           剖切面 <span className="text-on-surface-variant text-[11px] ml-1">(Section A-A)</span>
         </h3>
-        <SectionCutButton />
+        <span className="px-2 py-1 rounded bg-surface-container-highest border border-white/5 text-[10px] text-on-surface-variant font-mono">
+          剖面
+        </span>
       </div>
       <div className="flex-1 p-4 flex items-center justify-center relative bg-surface-container-lowest">
         <svg width={expanded ? size.w - 32 : W} height={expanded ? size.h - 72 : H} viewBox={`0 0 ${W} ${H}`}>
@@ -89,30 +91,59 @@ function ColumnSectionView() {
           {[0.25, 0.5, 0.75].map((f) => (
             <line key={`v${f}`} x1={innerPad + f * (W - innerPad * 2)} y1={innerPad} x2={innerPad + f * (W - innerPad * 2)} y2={H - innerPad} stroke="rgba(59,73,76,0.3)" strokeWidth={0.5} />
           ))}
-          {/* Stirrup outer hoop */}
-          <rect x={x0} y={y0} width={x1 - x0} height={y1 - y0} fill="none" stroke="#666" strokeWidth={2} />
-          {/* 135° stirrup hook at top-right corner (22G101-1 p2-7) - V4_FINAL */}
-          <path d={`M ${x1} ${y0} l 10 0 l 5 -5`} stroke="#666" strokeWidth={2} fill="none" strokeLinejoin="round" />
-          {/* Internal cross-ties */}
-          {params.stirrup.legs === 4 && (
-            <>
-              <line x1={(x0 + x1) / 2} y1={y0} x2={(x0 + x1) / 2} y2={y1} stroke="#666" strokeWidth={1.5} />
-              <line x1={x0} y1={(y0 + y1) / 2} x2={x1} y2={(y0 + y1) / 2} stroke="#666" strokeWidth={1.5} />
-            </>
-          )}
-          {params.stirrup.legs === 6 && (
-            <>
-              <line x1={x0 + (x1 - x0) / 3} y1={y0} x2={x0 + (x1 - x0) / 3} y2={y1} stroke="#666" strokeWidth={1.5} />
-              <line x1={x0 + 2 * (x1 - x0) / 3} y1={y0} x2={x0 + 2 * (x1 - x0) / 3} y2={y1} stroke="#666" strokeWidth={1.5} />
-              <line x1={x0} y1={(y0 + y1) / 2} x2={x1} y2={(y0 + y1) / 2} stroke="#666" strokeWidth={1.5} />
-            </>
-          )}
+          {/* Stirrup outer hoop + m×n cross ties */}
+          {derived.hoopLines.map((line, i) => (
+            <g key={i}>
+              <line
+                x1={toSvgX(line.x1)}
+                y1={toSvgY(line.y1)}
+                x2={toSvgX(line.x2)}
+                y2={toSvgY(line.y2)}
+                stroke={line.kind === 'outer' ? '#78909c' : '#607d8b'}
+                strokeWidth={line.kind === 'outer' ? 2 : 1.5}
+                strokeLinecap="round"
+              />
+              {line.kind === 'crossTie' && (() => {
+                const hookLen = 4 * params.stirrup.diameter * scale;
+                const hd = hookLen * Math.SQRT1_2;
+                const x1 = toSvgX(line.x1);
+                const y1 = toSvgY(line.y1);
+                const x2 = toSvgX(line.x2);
+                const y2 = toSvgY(line.y2);
+                const vertical = Math.abs(line.x1 - line.x2) < 1e-6;
+                return vertical
+                  ? <line x1={x1} y1={y1} x2={x1 + hd} y2={y1 + hd} stroke="#607d8b" strokeWidth={1.5} strokeLinecap="round" />
+                  : <line x1={x1} y1={y1} x2={x1 + hd} y2={y1 + hd} stroke="#607d8b" strokeWidth={1.5} strokeLinecap="round" />;
+              })()}
+            </g>
+          ))}
+          {/* 135° stirrup hook, matched to the frame beam section style. */}
+          {topLeftBar && (() => {
+            const outerTop = derived.hoopLines.find((line) => line.kind === 'outer' && Math.abs(line.y1 - line.y2) < 1e-6 && line.y1 > 0);
+            const outerLeft = derived.hoopLines.find((line) => line.kind === 'outer' && Math.abs(line.x1 - line.x2) < 1e-6 && line.x1 < 0);
+            if (!outerTop || !outerLeft) return null;
+            const hookLen = 5 * params.stirrup.diameter * scale;
+            const hd = hookLen * Math.SQRT1_2;
+            const barR = Math.max((topLeftBar.bundle.diameter * scale) / 2, 2.5);
+            const topHookStartX = toSvgX(topLeftBar.x) + barR + 1;
+            const topHookY = toSvgY(outerTop.y1);
+            const leftHookStartY = toSvgY(topLeftBar.y) + barR + 1;
+            const leftHookX = toSvgX(outerLeft.x1);
+            return (
+              <g>
+                <line x1={topHookStartX} y1={topHookY} x2={topHookStartX + hd} y2={topHookY + hd} stroke="#78909c" strokeWidth={2} strokeLinecap="round" />
+                <line x1={leftHookX} y1={leftHookStartY} x2={leftHookX + hd} y2={leftHookStartY + hd} stroke="#78909c" strokeWidth={2} strokeLinecap="round" />
+              </g>
+            );
+          })()}
           {/* Rebar dots */}
           {derived.barPositions.map((pos, i) => {
-            const cx = innerPad + (pos.x + params.b / 2) * scale;
-            const cy = innerPad + (params.h / 2 - pos.y) * scale;
+            const cx = toSvgX(pos.x);
+            const cy = toSvgY(pos.y);
+            const dia = pos.bundle.diameter * scale;
+            const color = pos.kind === 'corner' ? '#ef5350' : pos.kind === 'bMid' ? '#ffa726' : '#42a5f5';
             return (
-              <circle key={i} cx={cx} cy={cy} r={Math.max(dia / 2, 2.5)} fill="#00daf3" filter="drop-shadow(0 0 4px rgba(0,218,243,0.6))" />
+              <circle key={i} cx={cx} cy={cy} r={Math.max(dia / 2, 2.5)} fill={color} filter="drop-shadow(0 0 4px rgba(0,218,243,0.6))" />
             );
           })}
         </svg>
@@ -125,27 +156,48 @@ function ColumnSectionView() {
 
 function buildColumnRows(params: ColumnParams, d: ReturnType<typeof deriveColumn>) {
   const rows: RebarRow[] = [];
-  const lg = params.longitudinal;
-  // Longitudinal bars
-  rows.push({
-    mark: 'Z1',
-    dia: lg.diameter,
-    grade: lg.grade,
-    length: params.Hn,
-    qty: d.totalBars,
-    note: '纵筋',
-    highlight: true,
-  });
-  // Stirrups
+  const barGroups = [
+    { mark: 'Z1', kind: 'corner', note: '角筋' },
+    { mark: 'Z2', kind: 'bMid', note: 'b边中部筋' },
+    { mark: 'Z3', kind: 'hMid', note: 'h边中部筋' },
+  ] as const;
+
+  for (const group of barGroups) {
+    const bars = d.barPositions.filter((pos) => pos.kind === group.kind);
+    if (bars.length === 0) continue;
+    const bundle = bars[0].bundle;
+    rows.push({
+      mark: group.mark,
+      dia: bundle.diameter,
+      grade: bundle.grade,
+      length: params.Hn,
+      qty: bars.length,
+      note: group.note,
+      highlight: group.kind === 'corner',
+    });
+  }
+
+  const hoopUnitCount = Math.max(1, d.hoopLines.length / 4);
   const perimeter = 2 * (params.b - 2 * params.cover) + 2 * (params.h - 2 * params.cover) + 2 * 75 + 2 * 11.9 * params.stirrup.diameter;
+  const hoopLength = Math.round(perimeter * hoopUnitCount);
   rows.push({
     mark: 'G1',
     dia: params.stirrup.diameter,
     grade: params.stirrup.grade,
-    length: Math.round(perimeter),
-    qty: d.stirrupYs.length,
-    note: `箍筋 (加密@${params.stirrup.spacingDense}, 非加密@${params.stirrup.spacingSparse})`,
+    length: hoopLength,
+    qty: d.denseStirrupYs.length,
+    note: `加密区箍筋 ${d.stirrupLegs.x}×${d.stirrupLegs.y}@${params.stirrup.spacingDense}`,
   });
+  if (d.sparseStirrupYs.length > 0) {
+    rows.push({
+      mark: 'G2',
+      dia: params.stirrup.diameter,
+      grade: params.stirrup.grade,
+      length: hoopLength,
+      qty: d.sparseStirrupYs.length,
+      note: `非加密区箍筋 ${d.stirrupLegs.x}×${d.stirrupLegs.y}@${params.stirrup.spacingSparse}`,
+    });
+  }
   return rows;
 }
 
@@ -412,7 +464,8 @@ function SectionView() {
   const midRightYs = computeYs(midRightCount);
 
   // 标注：区分贯通筋和支座筋
-  const throughEnd = tt.count;
+  const throughLeftCount = Math.ceil(tt.count / 2);
+  const throughRightCount = tt.count - throughLeftCount;
 
   const svgW = expanded ? size.w - 32 : W;
   const svgH = expanded ? size.h - 72 : H;
@@ -531,10 +584,13 @@ function SectionView() {
           })}
 
           {/* 上部钢筋一排 (贯通筋红色, 支座负筋紫色) */}
-          {topXs.map((cx, i) => (
-            <circle key={`t${i}`} cx={cx} cy={topY} r={Math.max(dTop / 2, 3)}
-              fill={i < throughEnd ? '#ef5350' : '#ab47bc'} filter="url(#glow)" />
-          ))}
+          {topXs.map((cx, i) => {
+            const isThrough = i < throughLeftCount || i >= topXs.length - throughRightCount;
+            return (
+              <circle key={`t${i}`} cx={cx} cy={topY} r={Math.max(dTop / 2, 3)}
+                fill={isThrough ? '#ef5350' : '#ab47bc'} filter="url(#glow)" />
+            );
+          })}
           {/* 上部钢筋二排 (支座负筋, 紫色, 在第一排正下方按净距) */}
           {topRow2Count > 0 && (() => {
             const dSup = activeSupDia * scale;

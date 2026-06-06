@@ -7,11 +7,17 @@ export function ModelPicker() {
   const [tempKey, setTempKey] = useState('');
 
   const activeProviderId = useAiStore((s) => s.activeProviderId);
+  const activeModel = useAiStore((s) => s.activeModel);
   const apiKeys = useAiStore((s) => s.apiKeys);
   const setApiKey = useAiStore((s) => s.setApiKey);
   const setActiveProvider = useAiStore((s) => s.setActiveProvider);
+  const setActiveModel = useAiStore((s) => s.setActiveModel);
 
   const currentProvider = PROVIDERS.find((p) => p.config.id === activeProviderId) ?? PROVIDERS[0];
+  const currentModel =
+    currentProvider.config.models.find((m) => m.id === activeModel) ??
+    currentProvider.config.models.find((m) => m.id === currentProvider.config.defaultModel) ??
+    currentProvider.config.models[0];
   const hasKey = !!apiKeys[activeProviderId];
 
   const handleOpenConfig = () => {
@@ -31,7 +37,7 @@ export function ModelPicker() {
 
   return (
     <>
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-1 min-w-0">
         <select
           value={activeProviderId}
           onChange={(e) => {
@@ -48,9 +54,24 @@ export function ModelPicker() {
           ))}
         </select>
 
+        <select
+          value={currentModel?.id}
+          onChange={(e) => setActiveModel(e.target.value)}
+          title={currentModel?.note}
+          className="max-w-[96px] bg-surface-container-lowest border border-white/10 rounded text-[12px] text-on-surface-variant px-2 py-1 focus:border-primary-fixed-dim focus:outline-none transition-colors appearance-none cursor-pointer"
+        >
+          {currentProvider.config.models.map((model) => (
+            <option key={model.id} value={model.id}>
+              {model.status === 'recommended' ? '★ ' : ''}
+              {model.label}
+              {model.status === 'deprecated' ? ' (旧)' : ''}
+            </option>
+          ))}
+        </select>
+
         <button
           onClick={handleOpenConfig}
-          title={hasKey ? 'API Key 已配置，点击修改' : '配置 API Key（可选）'}
+          title={hasKey ? 'API Key 已配置，点击修改' : '配置 API Key（必填）'}
           className="p-1 rounded text-on-surface-variant/60 hover:text-on-surface-variant transition-colors"
         >
           <span className="material-symbols-outlined text-[16px]">
@@ -101,7 +122,7 @@ export function ModelPicker() {
             </div>
 
             <p className="text-[11px] text-on-surface-variant/60 mb-4 leading-relaxed">
-              Key 仅保存在本地浏览器，不会上传或共享。
+              Key 仅保存在本地浏览器，不会写入日志。请优先使用限额 Key；若页面被注入恶意脚本，localStorage 中的 Key 仍可能泄露。
               <a
                 href={currentProvider.config.apiKeyUrl}
                 target="_blank"
@@ -111,6 +132,12 @@ export function ModelPicker() {
                 获取 Key →
               </a>
             </p>
+
+            {currentModel?.status === 'deprecated' && (
+              <p className="text-[11px] text-amber-300/80 mb-4 leading-relaxed border border-amber-700/30 bg-amber-900/20 rounded-lg px-3 py-2">
+                当前模型为旧模型，建议切换到 {currentProvider.config.defaultModel}。
+              </p>
+            )}
 
             <div className="flex gap-2">
               <button
@@ -127,6 +154,14 @@ export function ModelPicker() {
                 保存
               </button>
             </div>
+            {hasKey && (
+              <button
+                onClick={handleClearKey}
+                className="mt-2 w-full py-1.5 rounded-lg text-[11px] text-red-300/80 hover:bg-red-600/10 transition-colors"
+              >
+                清除当前 Key
+              </button>
+            )}
           </div>
         </div>
       )}

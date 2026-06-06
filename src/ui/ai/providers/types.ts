@@ -6,11 +6,21 @@ export interface AIMessage {
 export interface AIProviderConfig {
   id: string;
   displayName: string;
-  models: string[];
+  models: AIModelConfig[];
   defaultModel: string;
   apiEndpoint: string;
   docsUrl: string;
   apiKeyUrl: string;
+  cors: 'supported' | 'unknown' | 'unsupported';
+}
+
+export interface AIModelConfig {
+  id: string;
+  label: string;
+  capability: 'fast' | 'reasoning' | 'balanced';
+  status: 'recommended' | 'available' | 'deprecated';
+  deprecationDate?: string;
+  note?: string;
 }
 
 export interface AIProvider {

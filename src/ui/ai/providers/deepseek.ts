@@ -1,14 +1,49 @@
 import type { AIMessage, AIProvider, AIProviderConfig } from './types';
+import { readOpenAiSseStream } from './sse';
 
 const config: AIProviderConfig = {
   id: 'deepseek',
   displayName: 'DeepSeek',
-  models: ['deepseek-chat', 'deepseek-reasoner'],
-  defaultModel: 'deepseek-chat',
+  models: [
+    {
+      id: 'deepseek-v4-flash',
+      label: 'DeepSeek V4 Flash',
+      capability: 'fast',
+      status: 'recommended',
+      note: '默认快速模型，适合平法问答和参数解释。',
+    },
+    {
+      id: 'deepseek-v4-pro',
+      label: 'DeepSeek V4 Pro',
+      capability: 'reasoning',
+      status: 'available',
+      note: '更强推理模型，适合复杂计算解释。',
+    },
+    {
+      id: 'deepseek-chat',
+      label: 'DeepSeek Chat',
+      capability: 'balanced',
+      status: 'deprecated',
+      deprecationDate: '2026-07-24T15:59:00Z',
+      note: '旧模型，按 DeepSeek 公告将停用。',
+    },
+    {
+      id: 'deepseek-reasoner',
+      label: 'DeepSeek Reasoner',
+      capability: 'reasoning',
+      status: 'deprecated',
+      deprecationDate: '2026-07-24T15:59:00Z',
+      note: '旧模型，按 DeepSeek 公告将停用。',
+    },
+  ],
+  defaultModel: 'deepseek-v4-flash',
   apiEndpoint: 'https://api.deepseek.com/v1/chat/completions',
   docsUrl: 'https://platform.deepseek.com/docs',
   apiKeyUrl: 'https://platform.deepseek.com/api_keys',
+  cors: 'supported',
 };
+
+const REQUEST_TIMEOUT_MS = 45000;
 
 function buildBody(
   history: AIMessage[],
@@ -33,6 +68,27 @@ async function checkResponse(res: Response): Promise<void> {
   throw new Error(msg);
 }
 
+function createTimeoutSignal(signal?: AbortSignal): { signal: AbortSignal; cleanup: () => void } {
+  const ctrl = new AbortController();
+  const timeout = window.setTimeout(() => {
+    ctrl.abort(new DOMException('Request timed out', 'TimeoutError'));
+  }, REQUEST_TIMEOUT_MS);
+
+  const abort = () => ctrl.abort(signal?.reason);
+  if (signal) {
+    if (signal.aborted) abort();
+    else signal.addEventListener('abort', abort, { once: true });
+  }
+
+  return {
+    signal: ctrl.signal,
+    cleanup: () => {
+      window.clearTimeout(timeout);
+      signal?.removeEventListener('abort', abort);
+    },
+  };
+}
+
 class DeepSeekProvider implements AIProvider {
   config = config;
 
@@ -43,15 +99,20 @@ class DeepSeekProvider implements AIProvider {
     options?: { model?: string; signal?: AbortSignal }
   ): Promise<string> {
     const model = options?.model ?? config.defaultModel;
-    const res = await fetch(config.apiEndpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-      body: buildBody(history, systemPrompt, model, false),
-      signal: options?.signal,
-    });
-    await checkResponse(res);
-    const data = await res.json();
-    return data.choices?.[0]?.message?.content ?? '';
+    const timeout = createTimeoutSignal(options?.signal);
+    try {
+      const res = await fetch(config.apiEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+        body: buildBody(history, systemPrompt, model, false),
+        signal: timeout.signal,
+      });
+      await checkResponse(res);
+      const data = await res.json();
+      return data.choices?.[0]?.message?.content ?? '';
+    } finally {
+      timeout.cleanup();
+    }
   }
 
   async chatStream(
@@ -62,49 +123,22 @@ class DeepSeekProvider implements AIProvider {
     options?: { model?: string; signal?: AbortSignal }
   ): Promise<string> {
     const model = options?.model ?? config.defaultModel;
-    const res = await fetch(config.apiEndpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-      body: buildBody(history, systemPrompt, model, true),
-      signal: options?.signal,
-    });
-    await checkResponse(res);
-
-    if (!res.body) throw new Error('No response body');
-
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let fullText = '';
-    let buffer = '';
-
+    const timeout = createTimeoutSignal(options?.signal);
     try {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() ?? '';
+      const res = await fetch(config.apiEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+        body: buildBody(history, systemPrompt, model, true),
+        signal: timeout.signal,
+      });
+      await checkResponse(res);
 
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed.startsWith('data: ')) continue;
-          const data = trimmed.slice(6);
-          if (data === '[DONE]') continue;
-          try {
-            const parsed = JSON.parse(data);
-            const chunk: string = parsed.choices?.[0]?.delta?.content ?? '';
-            if (chunk) {
-              fullText += chunk;
-              onChunk(chunk);
-            }
-          } catch { /* ignore malformed SSE lines */ }
-        }
-      }
+      if (!res.body) throw new Error('No response body');
+
+      return readOpenAiSseStream(res.body, onChunk);
     } finally {
-      reader.releaseLock();
+      timeout.cleanup();
     }
-
-    return fullText;
   }
 }
 

@@ -5,26 +5,13 @@ import { InputBox } from './InputBox';
 import { ModelPicker } from './ModelPicker';
 import { SuggestedQuestions } from './SuggestedQuestions';
 import { getProvider } from './providers';
-
-const SYSTEM_PROMPT = `你是一名资深建筑结构工程师，拥有以下领域的深厚知识：
-
-**核心专长：**
-- 平法图集：22G101-1（梁、柱、墙、板）、22G101-2（楼梯）、22G101-3（基础）及历版 16G101、11G101
-- 结构设计规范：GB 50010（混凝土结构设计规范）、GB 50011（抗震设计规范）、GB 50017（钢结构设计标准）、GB 50009（荷载规范）等国家标准
-- 施工验收规范：GB 50204（混凝土结构工程施工质量验收规范）等
-- 钢筋工程：锚固、搭接、弯钩、加密区、保护层等构造要求
-- 结构体系：框架结构、剪力墙结构、框剪结构、筒体结构等
-- 基础工程：独基、条基、筏板、桩基础等
-- 结构计算：内力分析、配筋计算、承载力验算等
-
-**回答原则：**
-1. 准确引用规范条文，标明出处（如「GB 50010-2010 第 8.3.1 条」或「22G101-1 第 2-34 页」）
-2. 回答简洁清晰，根据问题复杂度适当展开，避免冗余
-3. 涉及计算时，给出公式和推导步骤
-4. 遇到模糊描述，先按常规理解作答，再说明可能的特殊情况
-5. 对所有建筑结构工程相关问题均予以解答，不设话题限制
-
-当前构件参数：（暂无，用户可在对话中主动提供）`;
+import { useBeamStore } from '../../store/beamStore';
+import { useColumnStore } from '../../store/columnStore';
+import { useMemberStore } from '../../store/memberStore';
+import { MEMBER_LABELS } from '../../config';
+import { buildAgentContext } from './agentTools';
+import { buildSystemPrompt } from './agentPrompt';
+import { ensureAssistantText, selectHistoryForModel, validateUserMessage } from './guardrails';
 
 function getErrorMessage(err: unknown): string {
   const msg = err instanceof Error ? err.message : String(err);
@@ -48,6 +35,10 @@ export default function AssistantPanel() {
   const activeProviderId = useAiStore((s) => s.activeProviderId);
   const apiKeys = useAiStore((s) => s.apiKeys);
   const clearMessages = useAiStore((s) => s.clearMessages);
+  const lastGuardrailError = useAiStore((s) => s.lastGuardrailError);
+  const beamParams = useBeamStore((s) => s.params);
+  const columnParams = useColumnStore((s) => s.params);
+  const activeType = useMemberStore((s) => s.activeType);
 
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -62,22 +53,26 @@ export default function AssistantPanel() {
     if (!text.trim() || isStreaming) return;
 
     const store = useAiStore.getState();
-    const truncated = text.length > 4000 ? text.slice(0, 4000) : text;
+    const provider = getProvider(store.activeProviderId);
+    const guardrail = validateUserMessage(text, store.apiKeys[store.activeProviderId]);
+    if (!guardrail.ok || !guardrail.text) {
+      store.setGuardrailError(guardrail.error ?? '消息未通过发送检查。');
+      return;
+    }
 
-    const history = store.messages.map((m) => ({
+    const history = selectHistoryForModel(store.messages.map((m) => ({
       role: m.role as 'user' | 'assistant',
       content: m.content,
-    }));
-    history.push({ role: 'user', content: truncated });
+    })));
+    history.push({ role: 'user', content: guardrail.text });
 
-    store.addMessage({ role: 'user', content: truncated });
+    store.addMessage({ role: 'user', content: guardrail.text, warning: guardrail.warning });
     store.addMessage({ role: 'assistant', content: '' });
     store.setStreaming(true);
 
     const ctrl = new AbortController();
     store.setAbortController(ctrl);
 
-    const provider = getProvider(store.activeProviderId);
     if (!provider) {
       store.setLastMessageError('未找到对应的模型 Provider');
       store.setStreaming(false);
@@ -86,13 +81,27 @@ export default function AssistantPanel() {
     }
 
     try {
+      const context = buildAgentContext({
+        memberType: activeType,
+        memberLabel: MEMBER_LABELS[activeType],
+        beamParams,
+        columnParams,
+      });
+      const systemPrompt = buildSystemPrompt(context);
+      let fullText = '';
       await provider.chatStream(
         history,
-        SYSTEM_PROMPT,
+        systemPrompt,
         store.apiKeys[store.activeProviderId],
-        (chunk) => useAiStore.getState().appendToLastMessage(chunk),
+        (chunk) => {
+          fullText += chunk;
+          useAiStore.getState().appendToLastMessage(chunk);
+        },
         { model: store.activeModel, signal: ctrl.signal }
       );
+      if (!fullText.trim()) {
+        useAiStore.getState().setLastMessageError(ensureAssistantText(fullText));
+      }
     } catch (err) {
       const errorMsg = getErrorMessage(err);
       if (errorMsg) {
@@ -147,15 +156,29 @@ export default function AssistantPanel() {
         {/* Messages */}
         <div className="flex-1 overflow-y-auto p-3 space-y-3">
           {messages.length === 0 ? (
-            <SuggestedQuestions onSelect={sendMessage} />
+            <>
+              <SuggestedQuestions onSelect={sendMessage} />
+              {lastGuardrailError && (
+                <p className="text-[12px] text-red-300/80 border border-red-600/20 bg-red-950/20 rounded-lg px-3 py-2">
+                  {lastGuardrailError}
+                </p>
+              )}
+            </>
           ) : (
-            messages.map((msg, idx) => (
-              <ChatBubble
-                key={msg.id}
-                message={msg}
-                isStreaming={isStreaming && idx === messages.length - 1}
-              />
-            ))
+            <>
+              {messages.map((msg, idx) => (
+                <ChatBubble
+                  key={msg.id}
+                  message={msg}
+                  isStreaming={isStreaming && idx === messages.length - 1}
+                />
+              ))}
+              {lastGuardrailError && (
+                <p className="text-[12px] text-red-300/80 border border-red-600/20 bg-red-950/20 rounded-lg px-3 py-2">
+                  {lastGuardrailError}
+                </p>
+              )}
+            </>
           )}
           <div ref={messagesEndRef} />
         </div>

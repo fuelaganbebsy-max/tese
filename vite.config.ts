@@ -12,4 +12,27 @@ export default defineConfig({
     },
   },
   server: { host: '127.0.0.1', port: 5173 },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules/react') || id.includes('node_modules/react-dom')) {
+            return 'vendor-react';
+          }
+          if (id.includes('node_modules/@react-three/drei')) {
+            return 'vendor-r3f-drei';
+          }
+          if (id.includes('node_modules/@react-three/fiber')) {
+            return 'vendor-r3f';
+          }
+          if (id.includes('node_modules/three')) {
+            return 'vendor-three-core';
+          }
+          if (id.includes('node_modules/zustand')) {
+            return 'vendor-state';
+          }
+        },
+      },
+    },
+  },
 });
