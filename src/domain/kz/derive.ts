@@ -180,7 +180,7 @@ function calcHoopLines(params: ColumnParams): ColumnHoopLine[] {
 }
 
 export function deriveColumn(params: ColumnParams): ColumnDerived {
-  const totalHeight = params.floors * params.floorHeight;
+  const totalHeight = params.floorHeight;
   const denseZoneBottom = calcDenseZone(params);
   const denseZoneTop = calcDenseZone(params);
   const sparseZone = Math.max(0, params.Hn - denseZoneBottom - denseZoneTop);
@@ -209,7 +209,7 @@ export function defaultColumn(): ColumnParams {
     h: 600,
     D: 600,
     Hn: 3600,
-    floors: 1,
+    beamHeight: 600,
     floorHeight: 3600,
     cover: 25,
     concrete: 'C30',

@@ -1000,10 +1000,16 @@ export function ColumnParamContent() {
         <div className="space-y-3">
           <h4 className="font-body-sm text-body-sm font-medium text-on-surface font-bold">楼层参数</h4>
           <div className="grid grid-cols-2 gap-3">
-            <NumField label="净高 Hn" value={params.Hn} onChange={(v) => update({ Hn: v })} step={100} min={2000} max={8000} unit="mm" />
-            <NumField label="层数" value={params.floors} onChange={(v) => update({ floors: v })} step={1} min={1} max={100} />
+            <NumField label="层高" value={params.floorHeight} onChange={(v) => update({ floorHeight: v, Hn: v - params.beamHeight })} step={100} min={2000} max={8000} unit="mm" />
+            <NumField label="梁高" value={params.beamHeight} onChange={(v) => update({ beamHeight: v, Hn: params.floorHeight - v })} step={50} min={300} max={1200} unit="mm" />
           </div>
-          <NumField label="层高" value={params.floorHeight} onChange={(v) => update({ floorHeight: v })} step={100} min={2000} max={8000} unit="mm" />
+          <div className="flex flex-col gap-1">
+            <label className="font-body-sm text-[11px] text-on-surface-variant">净高 Hn</label>
+            <div className="w-full bg-surface-container-lowest border border-white/10 rounded px-3 py-1.5 font-label-numeric text-label-numeric text-on-surface/60 text-right font-mono pr-10 relative">
+              {params.Hn}
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 font-label-numeric text-[11px] text-on-surface-variant pointer-events-none font-mono">mm</span>
+            </div>
+          </div>
         </div>
 
         <div className="divider-gradient" />

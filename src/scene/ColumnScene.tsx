@@ -6,22 +6,42 @@ import { deriveColumn } from '../domain/kz/derive';
 import type { ColumnParams } from '../domain/kz/types';
 import { useColumnStore } from '../store/columnStore';
 
+/** 柱子超出梁外侧的长度 (mm) — 下侧超出梁底面，上侧超出梁顶面 */
+const COLUMN_EXTEND = 500;
+/** 梁宽 (mm) */
+const BEAM_WIDTH = 300;
+/** 梁高 (mm) */
+const BEAM_HEIGHT = 600;
+/** 梁从柱边伸出长度 (mm) */
+const BEAM_PROJECTION = 800;
+
+/** 柱底 Y 坐标 */
+const COL_BOTTOM = -COLUMN_EXTEND;
+/** 柱顶 Y 坐标 = Hn + 梁高 + 上侧伸出 */
+const colTop = (Hn: number) => Hn + BEAM_HEIGHT + COLUMN_EXTEND;
+/** 柱总高 */
+const colTotalH = (Hn: number) => colTop(Hn) - COL_BOTTOM;
+/** 柱几何中心 Y */
+const colCenterY = (Hn: number) => (colTop(Hn) + COL_BOTTOM) / 2;
+
 const BAR_COLORS = {
   corner: '#ef5350',
   bMid: '#ffa726',
   hMid: '#42a5f5',
 } as const;
 
-// 柱体混凝土
+// ─── 柱体混凝土 ───────────────────────────────────────────
 function ColumnConcrete({ params, derived, show }: { params: ColumnParams; derived: ReturnType<typeof deriveColumn>; show: boolean }) {
   const geo = useMemo(() => {
+    const totalH = colTotalH(params.Hn);
+    const cy = colCenterY(params.Hn);
     if (params.sectionType === 'circle') {
-      const g = new THREE.CylinderGeometry(params.D / 2, params.D / 2, params.Hn, 32);
-      g.translate(0, params.Hn / 2, 0);
+      const g = new THREE.CylinderGeometry(params.D / 2, params.D / 2, totalH, 32);
+      g.translate(0, cy, 0);
       return g;
     }
-    const g = new THREE.BoxGeometry(params.b, params.Hn, params.h);
-    g.translate(0, params.Hn / 2, 0);
+    const g = new THREE.BoxGeometry(params.b, totalH, params.h);
+    g.translate(0, cy, 0);
     return g;
   }, [params.sectionType, params.b, params.h, params.D, params.Hn]);
 
@@ -34,13 +54,15 @@ function ColumnConcrete({ params, derived, show }: { params: ColumnParams; deriv
   );
 }
 
-// 纵筋
+// ─── 纵筋（全长） ─────────────────────────────────────────
 function ColumnLongBars({ params, derived, show }: { params: ColumnParams; derived: ReturnType<typeof deriveColumn>; show: boolean }) {
   const bars = useMemo(() => {
+    const totalL = colTotalH(params.Hn);
+    const cy = colCenterY(params.Hn);
     return derived.barPositions.map((pos, i) => {
       const r = pos.bundle.diameter / 2;
-      const geo = new THREE.CylinderGeometry(r, r, params.Hn, 8);
-      geo.translate(pos.x, params.Hn / 2, pos.y);
+      const geo = new THREE.CylinderGeometry(r, r, totalL, 8);
+      geo.translate(pos.x, cy, pos.y);
       return <mesh key={i} geometry={geo}>
         <meshStandardMaterial color={BAR_COLORS[pos.kind]} metalness={0.7} roughness={0.35} envMapIntensity={1.2} />
       </mesh>;
@@ -51,7 +73,7 @@ function ColumnLongBars({ params, derived, show }: { params: ColumnParams; deriv
   return <>{bars}</>;
 }
 
-// 箍筋
+// ─── 箍筋 ─────────────────────────────────────────────────
 function buildRectLineGeometry(params: ColumnParams) {
   const c = params.cover + params.stirrup.diameter / 2;
   const halfW = (params.b - 2 * c) / 2;
@@ -105,6 +127,7 @@ function ColumnStirrupInstances({ geometry, ys, color }: { geometry: THREE.Buffe
     if (!ref.current) return;
     const dummy = new THREE.Object3D();
     ys.forEach((y, i) => {
+      // ys are already world Y coordinates
       dummy.position.set(0, y, 0);
       dummy.rotation.set(Math.PI / 2, 0, 0);
       dummy.updateMatrix();
@@ -121,6 +144,34 @@ function ColumnStirrupInstances({ geometry, ys, color }: { geometry: THREE.Buffe
   );
 }
 
+/** 计算沿柱全长（含伸出段）的箍筋 Y 坐标 */
+function computeFullStirrupYs(params: ColumnParams, derived: ReturnType<typeof deriveColumn>) {
+  const { spacingDense } = params.stirrup;
+  const bottom = COL_BOTTOM;
+  const top = colTop(params.Hn);
+
+  // 柱底伸出段（底部 → y=0）
+  const extraBelow: number[] = [];
+  let y = bottom + spacingDense / 2;
+  while (y < 0) {
+    extraBelow.push(y);
+    y += spacingDense;
+  }
+
+  // 柱顶伸出段（y=Hn → 顶部）
+  const extraAbove: number[] = [];
+  y = params.Hn + spacingDense;
+  while (y < top) {
+    extraAbove.push(y);
+    y += spacingDense;
+  }
+
+  return {
+    dense: [...extraBelow, ...derived.denseStirrupYs, ...extraAbove],
+    sparse: derived.sparseStirrupYs,
+  };
+}
+
 function ColumnStirrups({ params, derived, show }: { params: ColumnParams; derived: ReturnType<typeof deriveColumn>; show: boolean }) {
   const unitGeo = useMemo(() => {
     const c = params.cover + params.stirrup.diameter / 2;
@@ -134,17 +185,73 @@ function ColumnStirrups({ params, derived, show }: { params: ColumnParams; deriv
     return buildRectLineGeometry(params);
   }, [params.sectionType, params.b, params.h, params.D, params.cover, params.stirrup.diameter, params.stirrup.legs, params.stirrup.legsX, params.stirrup.legsY]);
 
-  if (!show || !unitGeo || derived.stirrupYs.length === 0) return null;
+  const { dense, sparse } = useMemo(
+    () => computeFullStirrupYs(params, derived),
+    [params.Hn, params.stirrup.spacingDense, derived.denseStirrupYs, derived.sparseStirrupYs],
+  );
+
+  if (!show || !unitGeo) return null;
 
   return (
     <>
-      <ColumnStirrupInstances geometry={unitGeo} ys={derived.sparseStirrupYs} color="#78909c" />
-      <ColumnStirrupInstances geometry={unitGeo} ys={derived.denseStirrupYs} color="#26c6da" />
+      <ColumnStirrupInstances geometry={unitGeo} ys={sparse} color="#78909c" />
+      <ColumnStirrupInstances geometry={unitGeo} ys={dense} color="#26c6da" />
     </>
   );
 }
 
-// Simple merge helper
+// ─── 框架梁 — 柱上下两端，X 和 Z 两个方向 ───────────────
+function ColumnBeams({ params }: { params: ColumnParams }) {
+  const beams = useMemo(() => {
+    const colHalfB = params.b / 2;
+    const colHalfH = params.h / 2;
+    const beamLen = BEAM_PROJECTION;
+    const result: { geo: THREE.BoxGeometry; color: string }[] = [];
+
+    function addBeam(cx: number, cy: number, cz: number, w: number, h: number, d: number, color: string) {
+      const g = new THREE.BoxGeometry(w, h, d);
+      g.translate(cx, cy, cz);
+      result.push({ geo: g, color });
+    }
+
+    // 底部 (y=0): 梁底面在 y=0，向上 BEAM_HEIGHT
+    const bottomCenterY = BEAM_HEIGHT / 2;
+
+    addBeam(-colHalfB - beamLen / 2, bottomCenterY, 0, beamLen, BEAM_HEIGHT, BEAM_WIDTH, '#8a9a6e');
+    addBeam(colHalfB + beamLen / 2, bottomCenterY, 0, beamLen, BEAM_HEIGHT, BEAM_WIDTH, '#8a9a6e');
+    addBeam(0, bottomCenterY, -colHalfH - beamLen / 2, BEAM_WIDTH, BEAM_HEIGHT, beamLen, '#6e9a8a');
+    addBeam(0, bottomCenterY, colHalfH + beamLen / 2, BEAM_WIDTH, BEAM_HEIGHT, beamLen, '#6e9a8a');
+
+    // 顶部 (y=Hn): 梁底面在 y=Hn，向上 BEAM_HEIGHT
+    const topCenterY = params.Hn + BEAM_HEIGHT / 2;
+
+    addBeam(-colHalfB - beamLen / 2, topCenterY, 0, beamLen, BEAM_HEIGHT, BEAM_WIDTH, '#8a9a6e');
+    addBeam(colHalfB + beamLen / 2, topCenterY, 0, beamLen, BEAM_HEIGHT, BEAM_WIDTH, '#8a9a6e');
+    addBeam(0, topCenterY, -colHalfH - beamLen / 2, BEAM_WIDTH, BEAM_HEIGHT, beamLen, '#6e9a8a');
+    addBeam(0, topCenterY, colHalfH + beamLen / 2, BEAM_WIDTH, BEAM_HEIGHT, beamLen, '#6e9a8a');
+
+    return result;
+  }, [params.b, params.h, params.Hn]);
+
+  return (
+    <group>
+      {beams.map((b, i) => (
+        <mesh key={i} geometry={b.geo}>
+          <meshStandardMaterial
+            color={b.color}
+            transparent
+            opacity={0.45}
+            depthWrite={false}
+            roughness={0.85}
+            metalness={0.05}
+          />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+// ─── 工具 ─────────────────────────────────────────────────
 function mergeGeometries(geos: THREE.BufferGeometry[]): THREE.BufferGeometry {
   const positions: number[] = [];
   const indices: number[] = [];
@@ -199,27 +306,31 @@ function CameraController({ center, camDist }: { center: [number, number, number
   return null;
 }
 
+// ─── 入口 ─────────────────────────────────────────────────
 export function ColumnScene() {
   const params = useColumnStore((s) => s.params);
   const view = useColumnStore((s) => s.view);
   const derived = useMemo(() => deriveColumn(params), [params]);
 
-  const camDist = Math.max(params.Hn * 1.5, 3000);
-  const center: [number, number, number] = [0, params.Hn / 2, 0];
+  const totalH = colTotalH(params.Hn);
+  const cy = colCenterY(params.Hn);
+  const camDist = Math.max(totalH * 1.5, 4000);
+  const center: [number, number, number] = [0, cy, 0];
 
   return (
     <Canvas
-      camera={{ position: [camDist * 0.5, params.Hn * 0.6, camDist * 0.5], fov: 35, near: 1, far: camDist * 5 }}
+      camera={{ position: [camDist * 0.5, cy * 1.1, camDist * 0.5], fov: 35, near: 1, far: camDist * 5 }}
       gl={{ antialias: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.2 }}
       className="w-full h-full"
     >
       <color attach="background" args={["#121212"]} />
       <ambientLight intensity={0.3} />
       <hemisphereLight args={["#7dd3fc", "#1e293b", 0.6]} />
-      <directionalLight position={[camDist, params.Hn * 2, camDist * 0.5]} intensity={1.2} color="#e0f2fe" />
-      <directionalLight position={[-camDist * 0.3, params.Hn, -camDist * 0.3]} intensity={0.4} color="#94a3b8" />
+      <directionalLight position={[camDist, totalH * 1.5, camDist * 0.5]} intensity={1.2} color="#e0f2fe" />
+      <directionalLight position={[-camDist * 0.3, cy, -camDist * 0.3]} intensity={0.4} color="#94a3b8" />
       <Environment preset="city" background={false} />
 
+      <ColumnBeams params={params} />
       <ColumnConcrete params={params} derived={derived} show={view.showConcrete} />
       <ColumnLongBars params={params} derived={derived} show={view.showLongitudinal} />
       <ColumnStirrups params={params} derived={derived} show={view.showStirrups} />

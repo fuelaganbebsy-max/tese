@@ -45,8 +45,8 @@ export interface ColumnParams {
   D: number;
   /** 柱净高 Hn (mm) */
   Hn: number;
-  /** 楼层数 */
-  floors: number;
+  /** 梁高 (mm) */
+  beamHeight: number;
   /** 层高 (mm) */
   floorHeight: number;
   /** 保护层厚度 c (mm) */

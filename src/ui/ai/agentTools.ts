@@ -146,7 +146,7 @@ function createColumnToolResults(params: ColumnParams, derived: ReturnType<typeo
             ? `D${params.D}mm`
             : `${params.b}x${params.h}mm`,
         clearHeight: `${params.Hn}mm`,
-        floors: params.floors,
+        beamHeight: `${params.beamHeight}mm`,
         floorHeight: `${params.floorHeight}mm`,
         cover: `${params.cover}mm`,
         concrete: params.concrete,
