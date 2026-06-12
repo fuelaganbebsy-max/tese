@@ -24,6 +24,11 @@ export function SideNav({ onBack }: { onBack?: () => void }) {
   const activeType = useMemberStore((s) => s.activeType);
   const switchMember = useMemberStore((s) => s.switchMember);
   const [expandedGroup, setExpandedGroup] = useState<string | null>('KL');
+  const [openMenu, setOpenMenu] = useState<'members' | 'reinforce' | 'learning' | null>('members');
+  const menuBtnCls = (active: boolean) =>
+    active
+      ? 'flex items-center gap-4 bg-primary-container/10 text-primary-fixed-dim px-4 py-3 rounded-lg font-bold bg-white/5'
+      : 'flex items-center gap-4 text-on-surface-variant px-4 py-3 opacity-70 hover:bg-white/5 hover:text-on-surface transition-all rounded-lg active:translate-x-1 duration-150';
 
   const loadSubtype = useBeamStore((s) => s.loadSubtype);
   const BEAM_SUBTYPES: MemberType[] = ['KL', 'L', 'WKL', 'XL'];
@@ -107,8 +112,19 @@ export function SideNav({ onBack }: { onBack?: () => void }) {
         </button>
       </div>
 
-      {/* Member Type Groups */}
+      {/* Top-level menus */}
       <div className="flex-1 flex flex-col gap-1 px-2 overflow-y-auto">
+        {/* 菜单一：结构构件 */}
+        <button
+          onClick={() => setOpenMenu((o) => (o === 'members' ? null : 'members'))}
+          className={menuBtnCls(openMenu === 'members')}
+        >
+          <span className="material-symbols-outlined" style={openMenu === 'members' ? { fontVariationSettings: "'FILL' 1" } : undefined}>dashboard</span>
+          <span className="font-label-numeric text-label-numeric font-mono flex-1 text-left">结构构件</span>
+          <span className="material-symbols-outlined text-[16px] transition-transform duration-200" style={{ transform: openMenu === 'members' ? 'rotate(90deg)' : 'rotate(0deg)' }}>chevron_right</span>
+        </button>
+        {openMenu === 'members' && (
+        <div className="ml-1 mt-0.5 mb-1 flex flex-col gap-1 border-l border-white/10 pl-2">
         {PARENT_TYPES.map((parentType) => {
           const subtypes = MEMBER_SUBTYPES[parentType] as readonly MemberType[];
           const isSingle = subtypes.length <= 1;
@@ -193,6 +209,38 @@ export function SideNav({ onBack }: { onBack?: () => void }) {
             </div>
           );
         })}
+        </div>
+        )}
+
+        {/* 菜单二：建筑结构加固 */}
+        <button
+          onClick={() => setOpenMenu((o) => (o === 'reinforce' ? null : 'reinforce'))}
+          className={menuBtnCls(openMenu === 'reinforce')}
+        >
+          <span className="material-symbols-outlined" style={openMenu === 'reinforce' ? { fontVariationSettings: "'FILL' 1" } : undefined}>construction</span>
+          <span className="font-label-numeric text-label-numeric font-mono flex-1 text-left">建筑结构加固</span>
+          <span className="material-symbols-outlined text-[16px] transition-transform duration-200" style={{ transform: openMenu === 'reinforce' ? 'rotate(90deg)' : 'rotate(0deg)' }}>chevron_right</span>
+        </button>
+        {openMenu === 'reinforce' && (
+          <div className="ml-1 mt-0.5 mb-1 border-l border-white/10 pl-4 py-3 text-on-surface-variant/70 font-label-numeric text-label-numeric font-mono text-[12px]">
+            模块开发中…
+          </div>
+        )}
+
+        {/* 菜单三：学习数据 */}
+        <button
+          onClick={() => setOpenMenu((o) => (o === 'learning' ? null : 'learning'))}
+          className={menuBtnCls(openMenu === 'learning')}
+        >
+          <span className="material-symbols-outlined" style={openMenu === 'learning' ? { fontVariationSettings: "'FILL' 1" } : undefined}>school</span>
+          <span className="font-label-numeric text-label-numeric font-mono flex-1 text-left">学习数据</span>
+          <span className="material-symbols-outlined text-[16px] transition-transform duration-200" style={{ transform: openMenu === 'learning' ? 'rotate(90deg)' : 'rotate(0deg)' }}>chevron_right</span>
+        </button>
+        {openMenu === 'learning' && (
+          <div className="ml-1 mt-0.5 mb-1 border-l border-white/10 pl-4 py-3 text-on-surface-variant/70 font-label-numeric text-label-numeric font-mono text-[12px]">
+            模块开发中…
+          </div>
+        )}
       </div>
 
       {/* Footer */}

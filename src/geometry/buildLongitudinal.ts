@@ -2,8 +2,9 @@ import * as THREE from 'three';
 import type { BeamParams, RebarBundle } from '../domain/kl/types';
 import type { Derived } from '../domain/kl/derive';
 import { tubeFromPolyline } from './rebarPath';
-import { laE } from '../domain/codes/22G101';
+import { laE, stirrupHookStraight } from '../domain/codes/22G101';
 import { maxTopBarsPerRow } from '../domain/codes/maxBarsPerRow';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 /** 坐标系：x 沿梁长方向(0 在左支座外边)，y 竖向(0 在梁底)，z 横向(0 在梁宽中心)
  *  上部钢筋 y = h - cover - dStirrup - d/2
@@ -11,7 +12,7 @@ import { maxTopBarsPerRow } from '../domain/codes/maxBarsPerRow';
  *  z 在 [-(b/2 - cover - dStirrup - d/2), +...]
  */
 
-export type RebarKind = 'top' | 'bottom' | 'support' | 'support-row2' | 'bottom2-corner' | 'bottom2-mid' | 'mid-construction' | 'mid-torsion';
+export type RebarKind = 'top' | 'bottom' | 'support' | 'support-row2' | 'bottom2-corner' | 'bottom2-mid' | 'mid-construction' | 'mid-torsion' | 'tie';
 
 export interface RebarBuilt {
   geometry: THREE.BufferGeometry;
@@ -309,6 +310,86 @@ export function buildMidBars(p: BeamParams, d: Derived): RebarBuilt[] {
     }
   }
   return out;
+}
+
+/** 拉筋 (22G101-1 p2-41)：横向拉结两腰构造钢筋，两端 135° 弯钩。
+ *  布置规则：
+ *   - 仅 2 根构造钢筋(左右各 1)：单排拉筋，间距 = 非加密区间距 × 2
+ *   - 4 根及以上(左右各 ≥2)：上下各排拉筋竖向错开半个间距，每排间距 = 非加密区间距 × 2
+ *  构造钢筋与扭筋的拉筋设置完全一致。
+ */
+export function buildTieBars(p: BeamParams, d: Derived): RebarBuilt[] {
+  const geoms: THREE.BufferGeometry[] = [];
+  for (let i = 0; i < p.spans.length; i++) {
+    const sp = p.spans[i];
+    if (!sp.midBarEnabled) continue;
+    const midType = sp.midBarType ?? 'construction';
+    // 扭筋的拉筋设置与构造钢筋完全一致
+    const bundle = midType === 'torsion'
+      ? (sp.midTorsionBar ?? { grade: 'HRB400', diameter: 14, count: 2 })
+      : (sp.midConstructionBar ?? { grade: 'HRB400', diameter: 12, count: 2 });
+    if (bundle.count < 2) continue;
+
+    const dsp = d.spans[i];
+    const dStir = sp.stirrup.diameter;
+    const dia = bundle.diameter;
+
+    // 每腰构造钢筋根数 → 拉筋排数 = 成对的根数
+    const leftCount = Math.ceil(bundle.count / 2);
+    const rightCount = Math.floor(bundle.count / 2);
+    const nLevels = Math.min(leftCount, rightCount);
+    if (nLevels < 1) continue;
+
+    // 竖向范围(与 buildMidBars 一致)：上部主筋下缘 ~ 下部主筋上缘
+    const topYMain = p.h - p.cover - dStir - p.topThrough.diameter / 2;
+    const botYMain = p.cover + dStir + sp.bottom.diameter / 2;
+    const upperBound = topYMain - p.topThrough.diameter / 2;
+    let lowerBound = botYMain + sp.bottom.diameter / 2;
+    if (sp.bottomRow2 && sp.bottomRow2.count > 0) {
+      const dia1 = sp.bottom.diameter;
+      const dia2 = sp.bottomRow2.diameter;
+      const clearGap = Math.max(25, dia1);
+      const y2 = botYMain + dia1 / 2 + clearGap + dia2 / 2;
+      lowerBound = y2 + dia2 / 2;
+    }
+    const yLevels = Array.from({ length: nLevels }, (_, j) =>
+      lowerBound + ((j + 1) / (nLevels + 1)) * (upperBound - lowerBound));
+
+    // 两腰构造钢筋的 z 坐标(拉筋两端拉结点)
+    const zLeft = -(p.b / 2 - p.cover - dStir - dia / 2);
+    const zRight = p.b / 2 - p.cover - dStir - dia / 2;
+
+    // 拉筋直径取箍筋直径；135° 弯钩
+    const tieDs = dStir;
+    const hook = stirrupHookStraight(tieDs);
+    const bendR = tieDs * 2;
+    const tail = hook + bendR;
+    const kt = tail / Math.SQRT2;
+
+    const s = sp.stirrup.spacingSparse;     // 非加密区间距
+    const tieSpacing = 2 * s;               // 拉筋间距 = 2× 非加密区间距
+    const xStart = dsp.x0 + 50;
+    const xEnd = dsp.x1 - 50;
+
+    for (let j = 0; j < nLevels; j++) {
+      const y = yLevels[j];
+      // 多排时上下错开半个间距(= 非加密区间距)
+      const phase = nLevels >= 2 ? (j % 2) * s : 0;
+      for (let cx = xStart + phase; cx <= xEnd + 1e-6; cx += tieSpacing) {
+        const pts = [
+          new THREE.Vector3(cx, y - kt, zLeft + kt),   // 左端 135° 斜尾(向梁内下方)
+          new THREE.Vector3(cx, y, zLeft),             // 拉结左腰构造筋
+          new THREE.Vector3(cx, y, zRight),            // 拉结右腰构造筋
+          new THREE.Vector3(cx, y - kt, zRight - kt),  // 右端 135° 斜尾
+        ];
+        geoms.push(tubeFromPolyline(pts, tieDs / 2, 6, bendR));
+      }
+    }
+  }
+  if (geoms.length === 0) return [];
+  const merged = mergeGeometries(geoms);
+  if (!merged) return [];
+  return [{ geometry: merged, meta: { label: '拉筋', length: 0 }, kind: 'tie' }];
 }
 
 /** 端支座 / 中间支座负筋 (上部，与贯通筋并排, 超出单排最大根数时分两排) */

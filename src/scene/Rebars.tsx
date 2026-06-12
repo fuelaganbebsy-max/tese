@@ -2,7 +2,7 @@ import { useMemo, useRef, useEffect } from 'react';
 import * as THREE from 'three';
 import { useBeamStore } from '../store/beamStore';
 import { derive } from '../domain/kl/derive';
-import { buildBottom, buildMidBars, buildTopSupport, buildTopThrough } from '../geometry/buildLongitudinal';
+import { buildBottom, buildMidBars, buildTieBars, buildTopSupport, buildTopThrough } from '../geometry/buildLongitudinal';
 import { buildStirrupUnitGeometry } from '../geometry/buildStirrup';
 
 const REBAR_TOP_COLOR = '#ef5350';
@@ -24,6 +24,7 @@ export function Rebars() {
   const bot = useMemo(() => (view.showLongitudinal ? buildBottom(params, d) : []), [params, d, view.showLongitudinal]);
   const sup = useMemo(() => (view.showLongitudinal ? buildTopSupport(params, d) : []), [params, d, view.showLongitudinal]);
   const mid = useMemo(() => (view.showLongitudinal ? buildMidBars(params, d) : []), [params, d, view.showLongitudinal]);
+  const tie = useMemo(() => (view.showStirrups ? buildTieBars(params, d) : []), [params, d, view.showStirrups]);
 
   const stirrupGeom = useMemo(() => (view.showStirrups ? buildStirrupUnitGeometry(params) : null), [params, view.showStirrups]);
 
@@ -77,6 +78,11 @@ export function Rebars() {
       {mid.map((r, i) => (
         <mesh key={`m-${i}`} geometry={r.geometry} renderOrder={1}>
           <meshStandardMaterial color={r.kind === 'mid-torsion' ? REBAR_MID_TORSION_COLOR : REBAR_MID_CONSTRUCTION_COLOR} metalness={0.7} roughness={0.35} envMapIntensity={1.2} />
+        </mesh>
+      ))}
+      {tie.map((r, i) => (
+        <mesh key={`tie-${i}`} geometry={r.geometry} renderOrder={1}>
+          <meshStandardMaterial color={STIRRUP_COLOR} metalness={0.65} roughness={0.4} envMapIntensity={1.0} />
         </mesh>
       ))}
       {stirrupGeom && stirrupXs.length > 0 && (

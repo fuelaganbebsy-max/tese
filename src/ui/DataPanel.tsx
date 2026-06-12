@@ -333,7 +333,16 @@ function SectionView() {
   const d = useMemo(() => derive(params), [params]);
   const [expanded, setExpanded] = useState(false);
   const [size, setSize] = useState({ w: 400, h: 420 });
+  const [anchor, setAnchor] = useState({ right: 16, bottom: 16 });
+  const panelRef = useRef<HTMLDivElement>(null);
   const startRef = useRef({ x: 0, y: 0, w: 0, h: 0 });
+  const toggleExpand = useCallback(() => {
+    if (!expanded) {
+      const r = panelRef.current?.getBoundingClientRect();
+      if (r) setAnchor({ right: window.innerWidth - r.right, bottom: window.innerHeight - r.bottom });
+    }
+    setExpanded((v) => !v);
+  }, [expanded]);
   const onResizeStart = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     startRef.current = { x: e.clientX, y: e.clientY, w: size.w, h: size.h };
@@ -470,9 +479,12 @@ function SectionView() {
   const svgW = expanded ? size.w - 32 : W;
   const svgH = expanded ? size.h - 72 : H;
   return (
+    <>
+      {expanded && <div className="w-1/3" aria-hidden />}
     <div
+      ref={panelRef}
       className={expanded ? 'rounded-xl flex flex-col overflow-hidden shadow-2xl' : 'w-1/3 rounded-xl bg-surface-container/80 backdrop-blur-[20px] border border-white/5 flex flex-col overflow-hidden'}
-      style={expanded ? { position: 'fixed', bottom: 16, right: 16, width: size.w, height: size.h, zIndex: 9999, background: 'rgba(13,13,13,0.97)', border: '1px solid rgba(0,218,243,0.25)', boxShadow: '0 8px 48px rgba(0,0,0,0.8)' } : {}}
+      style={expanded ? { position: 'fixed', bottom: anchor.bottom, right: anchor.right, width: size.w, height: size.h, zIndex: 9999, background: 'rgba(13,13,13,0.97)', border: '1px solid rgba(0,218,243,0.25)', boxShadow: '0 8px 48px rgba(0,0,0,0.8)' } : {}}
     >
       {expanded && (
         <div
@@ -484,7 +496,7 @@ function SectionView() {
       <div
         className="px-4 py-2 border-b border-white/5 bg-surface-container-highest/30 flex justify-between items-center shrink-0 select-none"
         style={{ cursor: 'pointer' }}
-        onDoubleClick={() => setExpanded(v => !v)}
+        onDoubleClick={toggleExpand}
         title={expanded ? '双击还原' : '双击放大'}
       >
         <h3 className="font-body-md text-body-md font-medium text-on-surface font-bold">
@@ -552,9 +564,9 @@ function SectionView() {
           {midRightYs.map((my, i) => (
             <circle key={`midR${i}`} cx={sx1 - barOff} cy={my} r={Math.max(midDia / 2, 2.5)} fill={midColor} filter="url(#glow)" />
           ))}
-          {/* 拉筋 (仅构造筋需要; 22G101-1 p2-41): 水平拉结两腰构造筋, 两端 135° 弯钩 ≥ 10d
+          {/* 拉筋 (构造筋/扭筋均需; 22G101-1 p2-41): 水平拉结两腰中部钢筋, 两端 135° 弯钩 ≥ 10d
               弯钩沿水平方向回弯 135°, 即指向梁内(右下/左下), 长度 ≈ 10d */}
-          {midType === 'construction' && midLeftYs.map((my, i) => {
+          {midEnabled && midLeftYs.map((my, i) => {
             if (i >= midRightYs.length) return null;
             // 拉筋: 一条 path 从左切点出发, 弧形绕过左构造筋外皮 → 水平段 → 弧形绕过右构造筋外皮 → 135° 斜尾入梁内
             const cxL = sx0 + barOff;
@@ -621,6 +633,149 @@ function SectionView() {
         </svg>
       </div>
     </div>
+    </>
+  );
+}
+
+/* ---------- Slide toggle (segmented control) ---------- */
+
+function SlideToggle<T extends string>({ options, value, onChange }: {
+  options: { value: T; label: string }[];
+  value: T;
+  onChange: (v: T) => void;
+}) {
+  const idx = Math.max(0, options.findIndex((o) => o.value === value));
+  return (
+    <div className="relative inline-flex p-0.5 rounded-lg bg-surface-container-highest/60 border border-white/5 select-none">
+      <div
+        className="absolute top-0.5 bottom-0.5 rounded-md bg-primary-fixed-dim/20 border border-primary-fixed-dim/40 transition-transform duration-200 ease-out"
+        style={{ width: `calc((100% - 4px) / ${options.length})`, transform: `translateX(${idx * 100}%)` }}
+      />
+      {options.map((o) => (
+        <button
+          key={o.value}
+          onClick={() => onChange(o.value)}
+          className={`relative z-10 px-3 py-1 text-[12px] font-medium rounded-md transition-colors whitespace-nowrap ${
+            value === o.value ? 'text-primary-fixed-dim' : 'text-on-surface-variant hover:text-on-surface'
+          }`}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/* ---------- Beam mechanics view (qualitative M / V diagrams) ---------- */
+
+function BeamMechanicsView() {
+  const params = useBeamStore((s) => s.params);
+  const activeType = useMemberStore((s) => s.activeType);
+  const isFrame = activeType === 'KL' || activeType === 'WKL';
+
+  const Ls = params.spans.map((s) => s.ln / 1000); // m
+  const n = Ls.length;
+  const leftFree = params.spans[0].hcLeft === 0;
+  const rightFree = params.spans[n - 1].hcRight === 0;
+
+  // 支座弯矩 (带符号, 负 = 上部受拉/支座负弯矩)
+  const S: (number | null)[] = new Array(n + 1).fill(0);
+  for (let i = 1; i < n; i++) {
+    const Lref = Math.max(Ls[i - 1], Ls[i]);
+    S[i] = -(Lref * Lref) / 11;
+  }
+  S[0] = leftFree ? null : isFrame ? -(Ls[0] * Ls[0]) / 24 : 0;
+  S[n] = rightFree ? null : isFrame ? -(Ls[n - 1] * Ls[n - 1]) / 24 : 0;
+
+  const spanData = Ls.map((L, i) => {
+    const lFree = i === 0 && leftFree;
+    const rFree = i === n - 1 && rightFree;
+    if (rFree) return { ML: -(L * L) / 2, MR: 0, Mmid: -(L * L) / 8, Vl: L, Vr: 0 };
+    if (lFree) return { ML: 0, MR: -(L * L) / 2, Mmid: -(L * L) / 8, Vl: 0, Vr: -L };
+    return { ML: S[i] ?? 0, MR: S[i + 1] ?? 0, Mmid: (L * L) / 16, Vl: L / 2, Vr: -L / 2 };
+  });
+
+  const Mmax = Math.max(1e-6, ...spanData.flatMap((s) => [Math.abs(s.ML), Math.abs(s.MR), Math.abs(s.Mmid)]));
+  const Vmax = Math.max(1e-6, ...spanData.flatMap((s) => [Math.abs(s.Vl), Math.abs(s.Vr)]));
+
+  const VW = 320, VH = 226, pad = 26;
+  const innerW = VW - pad * 2;
+  const totalL = Ls.reduce((a, b) => a + b, 0) || 1;
+  const cum: number[] = [0];
+  Ls.forEach((L) => cum.push(cum[cum.length - 1] + L));
+  const sx = (i: number) => pad + (cum[i] / totalL) * innerW;
+
+  const beamY = 24;
+  const momAxis = 98, momAmp = 40;
+  const shrAxis = 190, shrAmp = 30;
+  const mY = (M: number) => momAxis + (M / Mmax) * momAmp; // 正弯矩 (下部受拉) 画在轴线下方
+  const vY = (V: number) => shrAxis - (V / Vmax) * shrAmp; // 正剪力画在轴线上方
+
+  const SAMP = 18;
+  const momentPaths = spanData.map((s, i) => {
+    const x0 = sx(i), x1 = sx(i + 1);
+    const a = -4 * s.Mmid + 2 * s.ML + 2 * s.MR;
+    const b = (s.MR - s.ML) - a;
+    const c = s.ML;
+    let d = `M ${x0} ${momAxis}`;
+    for (let k = 0; k <= SAMP; k++) {
+      const t = k / SAMP;
+      const M = a * t * t + b * t + c;
+      d += ` L ${(x0 + (x1 - x0) * t).toFixed(2)} ${mY(M).toFixed(2)}`;
+    }
+    d += ` L ${x1} ${momAxis} Z`;
+    return d;
+  });
+  const shearPaths = spanData.map((s, i) => {
+    const x0 = sx(i), x1 = sx(i + 1);
+    return `M ${x0} ${shrAxis} L ${x0} ${vY(s.Vl).toFixed(2)} L ${x1} ${vY(s.Vr).toFixed(2)} L ${x1} ${shrAxis} Z`;
+  });
+
+  return (
+    <div className="flex-1 overflow-auto p-4 flex flex-col items-center justify-center bg-surface-container-lowest gap-2">
+      <svg width="100%" viewBox={`0 0 ${VW} ${VH}`} preserveAspectRatio="xMidYMid meet" style={{ maxWidth: 520 }}>
+        {/* 均布荷载示意 (向下箭头) */}
+        {Array.from({ length: 17 }).map((_, k) => {
+          const x = pad + (k / 16) * innerW;
+          const tip = beamY - 2;
+          return (
+            <g key={`q${k}`} stroke="rgba(120,144,156,0.6)" strokeWidth={1} strokeLinecap="round" strokeLinejoin="round" fill="none">
+              <line x1={x} y1={beamY - 13} x2={x} y2={tip} />
+              <path d={`M ${x - 2.4} ${tip - 3.2} L ${x} ${tip} L ${x + 2.4} ${tip - 3.2}`} />
+            </g>
+          );
+        })}
+        <line x1={pad} y1={beamY - 13} x2={VW - pad} y2={beamY - 13} stroke="rgba(120,144,156,0.45)" strokeWidth={1} />
+        <text x={VW - pad} y={beamY - 17} textAnchor="end" fontSize={8} fill="rgba(120,144,156,0.8)" fontFamily="monospace">q</text>
+
+        {/* 梁轴线 */}
+        <line x1={sx(0)} y1={beamY} x2={sx(n)} y2={beamY} stroke="#78909c" strokeWidth={3} strokeLinecap="round" />
+        {/* 支座 */}
+        {cum.map((_, i) => {
+          const free = (i === 0 && leftFree) || (i === n && rightFree);
+          if (free) return null;
+          const x = sx(i);
+          return <path key={`sup${i}`} d={`M ${x - 5} ${beamY + 11} L ${x + 5} ${beamY + 11} L ${x} ${beamY + 2} Z`} fill="#90a4ae" />;
+        })}
+
+        {/* 弯矩图 */}
+        <line x1={pad} y1={momAxis} x2={VW - pad} y2={momAxis} stroke="rgba(255,255,255,0.18)" strokeWidth={1} strokeDasharray="3 3" />
+        {momentPaths.map((d, i) => (
+          <path key={`m${i}`} d={d} fill="rgba(0,218,243,0.16)" stroke="#00daf3" strokeWidth={1.4} strokeLinejoin="round" />
+        ))}
+        <text x={pad} y={momAxis - momAmp - 4} fontSize={9} fill="#00daf3" fontFamily="monospace" fontWeight="bold">弯矩 M (定性)</text>
+
+        {/* 剪力图 */}
+        <line x1={pad} y1={shrAxis} x2={VW - pad} y2={shrAxis} stroke="rgba(255,255,255,0.18)" strokeWidth={1} strokeDasharray="3 3" />
+        {shearPaths.map((d, i) => (
+          <path key={`v${i}`} d={d} fill="rgba(255,167,38,0.16)" stroke="#ffa726" strokeWidth={1.4} strokeLinejoin="round" />
+        ))}
+        <text x={pad} y={shrAxis - shrAmp - 4} fontSize={9} fill="#ffa726" fontFamily="monospace" fontWeight="bold">剪力 V (定性)</text>
+      </svg>
+      <p className="text-[10px] text-on-surface-variant text-center leading-snug">
+        连续梁受均布荷载定性内力示意 · 仅按跨度比例绘制，未计入实际荷载与刚度
+      </p>
+    </div>
   );
 }
 
@@ -628,6 +783,31 @@ function QuantitiesTable() {
   const params = useBeamStore((s) => s.params);
   const d = useMemo(() => derive(params), [params]);
   const rows = useMemo(() => buildRows(params, d), [params, d]);
+  const [tab, setTab] = useState<'mechanics' | 'bom'>('bom');
+  const [expanded, setExpanded] = useState(false);
+  const [size, setSize] = useState({ w: 560, h: 420 });
+  const [anchor, setAnchor] = useState({ left: 16, bottom: 16 });
+  const panelRef = useRef<HTMLDivElement>(null);
+  const startRef = useRef({ x: 0, y: 0, w: 0, h: 0 });
+  const toggleExpand = useCallback(() => {
+    if (!expanded) {
+      const r = panelRef.current?.getBoundingClientRect();
+      if (r) setAnchor({ left: r.left, bottom: window.innerHeight - r.bottom });
+    }
+    setExpanded((v) => !v);
+  }, [expanded]);
+  const onResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    startRef.current = { x: e.clientX, y: e.clientY, w: size.w, h: size.h };
+    const onMove = (ev: MouseEvent) => setSize({
+      w: Math.max(320, startRef.current.w + (ev.clientX - startRef.current.x)),
+      h: Math.max(220, startRef.current.h + (startRef.current.y - ev.clientY)),
+    });
+    const onUp = () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }, [size]);
 
   const totalSteel = rows.reduce((s, r) => {
     const wPerM = 0.00617 * r.dia * r.dia;
@@ -652,55 +832,86 @@ function QuantitiesTable() {
   };
 
   return (
-    <div className="flex-1 rounded-xl bg-surface-container/80 backdrop-blur-[20px] border border-white/5 flex flex-col overflow-hidden">
-      <div className="px-4 py-2 border-b border-white/5 bg-surface-container-highest/30 flex justify-between items-center shrink-0">
-        <h3 className="font-body-md text-body-md font-medium text-on-surface flex items-center gap-2 font-bold">
-          <span className="material-symbols-outlined text-[16px] text-primary-fixed-dim">table_chart</span>
-          钢筋工程量 <span className="text-on-surface-variant text-[11px] font-normal ml-1">(BOM Data)</span>
-        </h3>
-        <button onClick={exportCsv} className="text-primary-fixed-dim text-[11px] hover:underline font-label-numeric text-label-numeric font-mono active:scale-95 transition-transform">
-          导出 CSV
-        </button>
+    <>
+      {expanded && <div className="flex-1" aria-hidden />}
+    <div
+      ref={panelRef}
+      className={expanded ? 'rounded-xl flex flex-col overflow-hidden shadow-2xl' : 'flex-1 rounded-xl bg-surface-container/80 backdrop-blur-[20px] border border-white/5 flex flex-col overflow-hidden'}
+      style={expanded ? { position: 'fixed', bottom: anchor.bottom, left: anchor.left, width: size.w, height: size.h, zIndex: 9999, background: 'rgba(13,13,13,0.97)', border: '1px solid rgba(0,218,243,0.25)', boxShadow: '0 8px 48px rgba(0,0,0,0.8)' } : {}}
+    >
+      {expanded && (
+        <div
+          style={{ position: 'absolute', top: 0, right: 0, width: 20, height: 20, cursor: 'ne-resize', zIndex: 10 }}
+          onMouseDown={onResizeStart}
+          title="拖动调整大小"
+        />
+      )}
+      <div
+        className="px-4 py-2 border-b border-white/5 bg-surface-container-highest/30 flex justify-between items-center shrink-0 gap-2 select-none"
+        style={{ cursor: 'pointer' }}
+        onDoubleClick={toggleExpand}
+        title={expanded ? '双击还原' : '双击放大'}
+      >
+        <SlideToggle
+          value={tab}
+          onChange={setTab}
+          options={[
+            { value: 'mechanics', label: '力学模型' },
+            { value: 'bom', label: '钢筋工程量' },
+          ]}
+        />
+        {tab === 'bom' && (
+          <button onClick={exportCsv} className="text-primary-fixed-dim text-[11px] hover:underline font-label-numeric text-label-numeric font-mono active:scale-95 transition-transform">
+            导出 CSV
+          </button>
+        )}
       </div>
-      <div className="flex-1 overflow-auto">
-        <table className="w-full text-left border-collapse">
-          <thead className="sticky top-0 bg-surface-container-high/90 backdrop-blur-md z-10 border-b border-white/10">
-            <tr>
-              <th className="px-4 py-2 font-label-numeric text-label-numeric text-[11px] uppercase tracking-wider text-on-surface-variant font-medium font-mono">编号</th>
-              <th className="px-4 py-2 font-label-numeric text-label-numeric text-[11px] uppercase tracking-wider text-on-surface-variant font-medium font-mono">规格</th>
-              <th className="px-4 py-2 font-label-numeric text-label-numeric text-[11px] uppercase tracking-wider text-on-surface-variant font-medium font-mono">长度</th>
-              <th className="px-4 py-2 font-label-numeric text-label-numeric text-[11px] uppercase tracking-wider text-on-surface-variant font-medium font-mono">数量</th>
-              <th className="px-4 py-2 font-label-numeric text-label-numeric text-[11px] uppercase tracking-wider text-on-surface-variant font-medium text-right font-mono">重量 (kg)</th>
-            </tr>
-          </thead>
-          <tbody className="font-label-numeric text-label-numeric text-[12px] text-on-surface font-mono">
-            {rows.map((r, i) => {
-              const wPerM = 0.00617 * r.dia * r.dia;
-              const weight = (r.length / 1000) * r.qty * wPerM;
-              return (
-                <tr key={i} className="border-b border-white/[0.02] hover:bg-white/[0.04] transition-colors group">
-                  <td className="px-4 py-2 text-primary-fixed-dim font-mono">{r.mark}</td>
-                  <td className="px-4 py-2 font-mono">
-                    <span className="px-1.5 py-0.5 rounded bg-surface-container-highest border border-white/5 text-on-surface">
-                      {r.grade} ∅{r.dia}
-                    </span>
-                  </td>
-                  <td className="px-4 py-2 font-mono">{(r.length / 1000).toFixed(2)}m</td>
-                  <td className="px-4 py-2 font-mono">{r.qty}</td>
-                  <td className="px-4 py-2 text-right group-hover:text-primary-fixed-dim transition-colors font-mono">
-                    {weight.toFixed(1)}
-                  </td>
+      {tab === 'mechanics' ? (
+        <BeamMechanicsView />
+      ) : (
+        <>
+          <div className="flex-1 overflow-auto">
+            <table className="w-full text-left border-collapse">
+              <thead className="sticky top-0 bg-surface-container-high/90 backdrop-blur-md z-10 border-b border-white/10">
+                <tr>
+                  <th className="px-4 py-2 font-label-numeric text-label-numeric text-[11px] uppercase tracking-wider text-on-surface-variant font-medium font-mono">编号</th>
+                  <th className="px-4 py-2 font-label-numeric text-label-numeric text-[11px] uppercase tracking-wider text-on-surface-variant font-medium font-mono">规格</th>
+                  <th className="px-4 py-2 font-label-numeric text-label-numeric text-[11px] uppercase tracking-wider text-on-surface-variant font-medium font-mono">长度</th>
+                  <th className="px-4 py-2 font-label-numeric text-label-numeric text-[11px] uppercase tracking-wider text-on-surface-variant font-medium font-mono">数量</th>
+                  <th className="px-4 py-2 font-label-numeric text-label-numeric text-[11px] uppercase tracking-wider text-on-surface-variant font-medium text-right font-mono">重量 (kg)</th>
                 </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-      <div className="border-t border-white/5 px-4 py-2 flex items-center justify-between bg-surface-container-highest/30">
-        <span className="text-[11px] text-on-surface-variant">总钢筋估重</span>
-        <span className="font-label-numeric text-label-numeric text-primary-fixed-dim font-mono font-bold">{totalSteel.toFixed(2)} kg</span>
-      </div>
+              </thead>
+              <tbody className="font-label-numeric text-label-numeric text-[12px] text-on-surface font-mono">
+                {rows.map((r, i) => {
+                  const wPerM = 0.00617 * r.dia * r.dia;
+                  const weight = (r.length / 1000) * r.qty * wPerM;
+                  return (
+                    <tr key={i} className="border-b border-white/[0.02] hover:bg-white/[0.04] transition-colors group">
+                      <td className="px-4 py-2 text-primary-fixed-dim font-mono">{r.mark}</td>
+                      <td className="px-4 py-2 font-mono">
+                        <span className="px-1.5 py-0.5 rounded bg-surface-container-highest border border-white/5 text-on-surface">
+                          {r.grade} ∅{r.dia}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2 font-mono">{(r.length / 1000).toFixed(2)}m</td>
+                      <td className="px-4 py-2 font-mono">{r.qty}</td>
+                      <td className="px-4 py-2 text-right group-hover:text-primary-fixed-dim transition-colors font-mono">
+                        {weight.toFixed(1)}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <div className="border-t border-white/5 px-4 py-2 flex items-center justify-between bg-surface-container-highest/30">
+            <span className="text-[11px] text-on-surface-variant">总钢筋估重</span>
+            <span className="font-label-numeric text-label-numeric text-primary-fixed-dim font-mono font-bold">{totalSteel.toFixed(2)} kg</span>
+          </div>
+        </>
+      )}
     </div>
+    </>
   );
 }
 
