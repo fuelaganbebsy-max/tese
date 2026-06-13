@@ -407,6 +407,7 @@ function SectionView() {
   const isErection = params.topBarType === 'erection';
   const archPresent = inSpan && distFromLeft >= ext.left - 150 && distFromRight >= ext.right - 150;
   const effThruCount = isErection ? (archPresent ? tt.count : 0) : tt.count;
+  const hasErectionBars = isErection && effThruCount > 0;
   // 按表查最大单排根数, 超出则分两排 (架立筋模式: 支座范围无贯通筋占用排位)
   const supThruCount = isErection ? 0 : tt.count;
   const supSplit = splitSupportRows(params.b, params.cover, tt.diameter, supThruCount, activeSupDia, activeSupCount);
@@ -457,10 +458,35 @@ function SectionView() {
   const topY = sy0 + barOff;
   const botY = sy1 - barOff;
 
-  // 上部钢筋 X 坐标
-  const topXs = Array.from({ length: topTotalCount }, (_, i) =>
-    topTotalCount === 1 ? (sx0 + sx1) / 2 : sx0 + barOff + (i * (sx1 - sx0 - 2 * barOff)) / (topTotalCount - 1)
-  );
+  // 上部钢筋 X 坐标 — 架立筋模式：负筋全宽分布，架立筋紧贴角筋内侧
+  let topXs: number[] = [];
+  if (hasErectionBars) {
+    // 支座负筋全宽分布
+    const supCount = supSplit.row1;
+    const supXs = Array.from({ length: supCount }, (_, i) =>
+      supCount === 1 ? (sx0 + sx1) / 2 : sx0 + barOff + (i * (sx1 - sx0 - 2 * barOff)) / (supCount - 1)
+    );
+    // 架立筋紧贴左右两根角筋内侧
+    const rEre = Math.max(dTop / 2, 3);
+    const gap = rEre + rEre + 1;
+    let eX: number[];
+    if (effThruCount >= 2 && supCount >= 2) {
+      // 有角筋：架立筋紧贴
+      eX = [supXs[0] + gap, supXs[supCount - 1] - gap];
+    } else if (effThruCount >= 2) {
+      // 无角筋（跨中）：架立筋居中均匀排列
+      eX = [(sx0 + sx1) / 2 - gap, (sx0 + sx1) / 2 + gap];
+    } else {
+      eX = [(sx0 + sx1) / 2];
+    }
+    // 合并：负筋在外侧，架立筋在之间（内侧）
+    topXs = [...supXs.slice(0, Math.ceil(supCount / 2)), ...eX, ...supXs.slice(Math.ceil(supCount / 2))];
+  } else {
+    // 贯通筋模式或无架立筋：所有上部一排钢筋均匀排列
+    topXs = Array.from({ length: Math.max(topTotalCount, 1) }, (_, i) =>
+      topTotalCount <= 1 ? (sx0 + sx1) / 2 : sx0 + barOff + (i * (sx1 - sx0 - 2 * barOff)) / (topTotalCount - 1)
+    );
+  }
   // 下部一排 X 坐标
   const botXs = Array.from({ length: botCount }, (_, i) =>
     botCount === 1 ? (sx0 + sx1) / 2 : sx0 + barOff + (i * (sx1 - sx0 - 2 * barOff)) / (botCount - 1)
@@ -619,11 +645,10 @@ function SectionView() {
 
           {/* 上部钢筋一排 (贯通筋红色 / 架立筋粉色, 支座负筋紫色) */}
           {topXs.map((cx, i) => {
-            // 架立筋模式：架立筋在负筋内侧（紧贴角筋），支座负筋在外侧
+            // 架立筋模式：架立筋在中间（紧贴角筋内侧），负筋在两侧
             // 贯通筋模式：贯通筋在外侧，支座负筋在内侧
-            const isThrough = isErection
-              ? (i >= throughLeftCount && i < topXs.length - throughRightCount)
-              : (i < throughLeftCount || i >= topXs.length - throughRightCount);
+            const isErectionBar = isErection && hasErectionBars && i >= Math.ceil(supSplit.row1 / 2) && i < Math.ceil(supSplit.row1 / 2) + effThruCount;
+            const isThrough = isErection ? isErectionBar : (i < throughLeftCount || i >= topXs.length - throughRightCount);
             const thruColor = isErection ? '#ec407a' : '#ef5350';
             return (
               <circle key={`t${i}`} cx={cx} cy={topY} r={Math.max(dTop / 2, 3)}
