@@ -294,16 +294,33 @@ interface RebarRow {
 function buildRows(params: ReturnType<typeof useBeamStore.getState>['params'], d: ReturnType<typeof derive>): RebarRow[] {
   const rows: RebarRow[] = [];
   const tt = params.topThrough;
-  const topLen = d.totalLength + 2 * (d.topAnchor.horizontal + d.topAnchor.vertical) - 2 * params.cover;
-  rows.push({
-    mark: 'T1',
-    dia: tt.diameter,
-    grade: tt.grade,
-    length: topLen,
-    qty: tt.count,
-    note: '上部贯通',
-    highlight: true,
-  });
+  if (params.topBarType === 'erection') {
+    // 架立筋：每跨独立，与左右支座负筋搭接 150mm
+    params.spans.forEach((sp, i) => {
+      const ext = d.topSupportExtend[i];
+      const lj = Math.max(0, sp.ln - ext.left - ext.right + 2 * 150);
+      rows.push({
+        mark: `JL${i + 1}`,
+        dia: tt.diameter,
+        grade: tt.grade,
+        length: lj,
+        qty: tt.count,
+        note: `第${i + 1}跨架立筋（搭接150）`,
+        highlight: true,
+      });
+    });
+  } else {
+    const topLen = d.totalLength + 2 * (d.topAnchor.horizontal + d.topAnchor.vertical) - 2 * params.cover;
+    rows.push({
+      mark: 'T1',
+      dia: tt.diameter,
+      grade: tt.grade,
+      length: topLen,
+      qty: tt.count,
+      note: '上部贯通',
+      highlight: true,
+    });
+  }
 
   params.spans.forEach((sp, i) => {
     const ba = d.bottomAnchorPerSpan[i];
@@ -386,9 +403,14 @@ function SectionView() {
   const activeSupBundle = topLeftCount >= topRightCount ? sp.topLeftSupport : sp.topRightSupport;
   const activeSupCount = Math.max(topLeftCount, topRightCount);
   const activeSupDia = activeSupBundle?.diameter ?? tt.diameter;
-  // 按表查最大单排根数, 超出则分两排
-  const supSplit = splitSupportRows(params.b, params.cover, tt.diameter, tt.count, activeSupDia, activeSupCount);
-  const topRow1Count = tt.count + supSplit.row1; // 第一排总数
+  // 上部贯通筋 / 架立筋: 架立筋仅在跨中(支座负筋伸入端点 ± 150mm 搭接)区间存在
+  const isErection = params.topBarType === 'erection';
+  const archPresent = inSpan && distFromLeft >= ext.left - 150 && distFromRight >= ext.right - 150;
+  const effThruCount = isErection ? (archPresent ? tt.count : 0) : tt.count;
+  // 按表查最大单排根数, 超出则分两排 (架立筋模式: 支座范围无贯通筋占用排位)
+  const supThruCount = isErection ? 0 : tt.count;
+  const supSplit = splitSupportRows(params.b, params.cover, tt.diameter, supThruCount, activeSupDia, activeSupCount);
+  const topRow1Count = effThruCount + supSplit.row1; // 第一排总数
   // 二排仅在 ln/4 区间内存在
   const inRow2Zone = (topLeftCount > 0 && hasTopLeftRow2) || (topRightCount > 0 && hasTopRightRow2);
   const topRow2Count = inRow2Zone ? supSplit.row2 : 0;
@@ -472,9 +494,9 @@ function SectionView() {
   const midLeftYs = computeYs(midLeftCount);
   const midRightYs = computeYs(midRightCount);
 
-  // 标注：区分贯通筋和支座筋
-  const throughLeftCount = Math.ceil(tt.count / 2);
-  const throughRightCount = tt.count - throughLeftCount;
+  // 标注：区分贯通筋/架立筋 和 支座筋
+  const throughLeftCount = Math.ceil(effThruCount / 2);
+  const throughRightCount = effThruCount - throughLeftCount;
 
   const svgW = expanded ? size.w - 32 : W;
   const svgH = expanded ? size.h - 72 : H;
@@ -595,12 +617,17 @@ function SectionView() {
             );
           })}
 
-          {/* 上部钢筋一排 (贯通筋红色, 支座负筋紫色) */}
+          {/* 上部钢筋一排 (贯通筋红色 / 架立筋粉色, 支座负筋紫色) */}
           {topXs.map((cx, i) => {
-            const isThrough = i < throughLeftCount || i >= topXs.length - throughRightCount;
+            // 架立筋模式：架立筋在负筋内侧（紧贴角筋），支座负筋在外侧
+            // 贯通筋模式：贯通筋在外侧，支座负筋在内侧
+            const isThrough = isErection
+              ? (i >= throughLeftCount && i < topXs.length - throughRightCount)
+              : (i < throughLeftCount || i >= topXs.length - throughRightCount);
+            const thruColor = isErection ? '#ec407a' : '#ef5350';
             return (
               <circle key={`t${i}`} cx={cx} cy={topY} r={Math.max(dTop / 2, 3)}
-                fill={isThrough ? '#ef5350' : '#ab47bc'} filter="url(#glow)" />
+                fill={isThrough ? thruColor : '#ab47bc'} filter="url(#glow)" />
             );
           })}
           {/* 上部钢筋二排 (支座负筋, 紫色, 在第一排正下方按净距) */}

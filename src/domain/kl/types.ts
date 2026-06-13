@@ -73,8 +73,10 @@ export interface BeamParams {
   cover: number;
   concrete: ConcreteGrade;
   seismic: SeismicLevel;
-  /** 上部贯通筋 */
+  /** 上部贯通筋 / 架立筋 (二选一) 的规格 */
   topThrough: RebarBundle;
+  /** 上部钢筋类型: 'through' 上部贯通筋(默认) | 'erection' 架立筋(与支座负筋搭接 150mm) */
+  topBarType?: 'through' | 'erection';
   /** 各跨 */
   spans: Span[];
   /** 竖向加腋（左端）— 梁底左支座处向下加深 */

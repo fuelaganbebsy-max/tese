@@ -12,7 +12,10 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
  *  z 在 [-(b/2 - cover - dStirrup - d/2), +...]
  */
 
-export type RebarKind = 'top' | 'bottom' | 'support' | 'support-row2' | 'bottom2-corner' | 'bottom2-mid' | 'mid-construction' | 'mid-torsion' | 'tie';
+export type RebarKind = 'top' | 'erection' | 'bottom' | 'support' | 'support-row2' | 'bottom2-corner' | 'bottom2-mid' | 'mid-construction' | 'mid-torsion' | 'tie';
+
+/** 架立筋与支座负筋的搭接长度 (22G101-1): 150mm */
+export const ERECTION_LAP = 150;
 
 export interface RebarBuilt {
   geometry: THREE.BufferGeometry;
@@ -50,23 +53,25 @@ export function splitSupportRows(
   return { row1, row2 };
 }
 
-/** 上排（贯通筋 + 支座负筋一排部分）共享 z 槽位：贯通筋外侧 + 一排支座筋居中 */
-function topRowLayout(p: BeamParams) {
+/** 上排（贯通筋 + 支座负筋一排部分）共享 z 槽位：贯通筋外侧 + 一排支座筋居中
+ *  架立筋模式：支座负筋在外侧槽位、架立筋在内侧槽位（紧挨负筋绑扎） */
+function topRowLayout(p: BeamParams, isErection = false) {
   const dStir = p.spans[0]?.stirrup.diameter ?? DEFAULT_STIRRUP_DIA;
   const dThru = p.topThrough.diameter;
+  const erectionCount = isErection ? p.topThrough.count : 0;
+  const nt = isErection ? 0 : p.topThrough.count;
   // 各支座一排可容纳的负筋根数
   const supRow1Counts = p.spans.flatMap((sp) => {
     const out: number[] = [];
     if (sp.topLeftSupport) {
-      out.push(splitSupportRows(p.b, p.cover, dThru, p.topThrough.count, sp.topLeftSupport.diameter, sp.topLeftSupport.count).row1);
+      out.push(splitSupportRows(p.b, p.cover, dThru, nt, sp.topLeftSupport.diameter, sp.topLeftSupport.count).row1);
     }
     if (sp.topRightSupport) {
-      out.push(splitSupportRows(p.b, p.cover, dThru, p.topThrough.count, sp.topRightSupport.diameter, sp.topRightSupport.count).row1);
+      out.push(splitSupportRows(p.b, p.cover, dThru, nt, sp.topRightSupport.diameter, sp.topRightSupport.count).row1);
     }
     return out;
   });
   const maxSupRow1 = Math.max(0, ...supRow1Counts);
-  const nt = p.topThrough.count;
   const total = nt + maxSupRow1;
   const dMax = Math.max(
     dThru,
@@ -80,14 +85,59 @@ function topRowLayout(p: BeamParams) {
     ...slots.slice(slots.length - ntRight),
   ];
   const supportSlots = slots.slice(ntLeft, slots.length - ntRight); // 中间槽位供一排支座负筋使用
+  // 架立筋模式：重新计算全排（负筋一排 + 架立筋），负筋在外侧、架立筋在内侧
+  let erectionSlots: number[] = [];
+  if (isErection && maxSupRow1 > 0 && erectionCount > 0) {
+    const totalAll = maxSupRow1 + erectionCount;
+    const allSlots = distributeZ(p.b, p.cover, dStir, dMax, totalAll);
+    const supLeft = Math.ceil(maxSupRow1 / 2);
+    const supRight = maxSupRow1 - supLeft;
+    erectionSlots = allSlots.slice(supLeft, allSlots.length - supRight);
+  }
   const y = p.h - p.cover - dStir - dMax / 2;
-  return { dStir, throughZ, supportSlots, y, dMax };
+  return { dStir, throughZ, supportSlots, erectionSlots, y, dMax };
 }
 
-/** 上部贯通钢筋：从左支座外边 - 弯锚平直 + 弯钩，到右端类似 */
+/** 上部贯通钢筋 / 架立筋
+ *  - 贯通筋(through): 从左支座外边 — 弯锚平直 + 弯钩，到右端类似，沿全梁通长
+ *  - 架立筋(erection): 每跨独立，仅布于跨中，与左右支座负筋搭接 150mm，不伸入支座、无弯钩 */
 export function buildTopThrough(p: BeamParams, d: Derived): RebarBuilt[] {
   const { throughZ: zs, y } = topRowLayout(p);
   const dia = p.topThrough.diameter;
+
+  // 架立筋：逐跨布置，端部与支座负筋搭接 150mm
+  // 架立筋放在支座负筋内侧，紧挨着负筋（绑扎连接关系）
+  if (p.topBarType === 'erection') {
+    const out: RebarBuilt[] = [];
+    // 架立筋紧贴角部负筋内侧（表面贴着表面绑扎）
+    const { supportSlots, dMax } = topRowLayout(p, true);
+    // 角筋（最外侧负筋）在 supportSlots[0] 和 supportSlots[-1]
+    // 架立筋在其内侧紧贴，中心距 = (dMax + dia)/2
+    const gap = (dMax + dia) / 2;
+    const erectionZs = supportSlots.length >= 2
+      ? [supportSlots[0] + gap, supportSlots[supportSlots.length - 1] - gap]
+      : [0];
+    for (let i = 0; i < p.spans.length; i++) {
+      const dsp = d.spans[i];
+      const ext = d.topSupportExtend[i];
+      // 支座负筋伸入跨内一排端点: 左 x0+ext.left, 右 x1-ext.right; 架立筋与其搭接 150mm
+      const xLeft = dsp.x0 + ext.left - ERECTION_LAP;
+      const xRight = dsp.x1 - ext.right + ERECTION_LAP;
+      if (xRight <= xLeft) continue; // 跨太短: 支座负筋已覆盖, 无需架立筋
+      erectionZs.forEach((z, k) => {
+        const pts = [
+          new THREE.Vector3(xLeft, y, z),
+          new THREE.Vector3(xRight, y, z),
+        ];
+        out.push({
+          geometry: tubeFromPolyline(pts, dia / 2),
+          meta: { label: `第${i + 1}跨架立筋 ${k + 1}/${p.topThrough.count}`, length: xRight - xLeft },
+          kind: 'erection',
+        });
+      });
+    }
+    return out;
+  }
 
   const xLeftEnd = p.cover; // 进入左支座弯锚水平段终点 ~ 距外侧保护层
   const xRightEnd = d.totalLength - p.cover;
@@ -104,6 +154,7 @@ export function buildTopThrough(p: BeamParams, d: Derived): RebarBuilt[] {
     return {
       geometry: tubeFromPolyline(pts, dia / 2),
       meta: { label: `上部贯通筋 ${i + 1}/${p.topThrough.count}`, length: pts.reduce((s, _, k) => k > 0 ? s + pts[k].distanceTo(pts[k-1]) : s, 0) },
+      kind: 'top',
     };
   });
 }
@@ -395,10 +446,25 @@ export function buildTieBars(p: BeamParams, d: Derived): RebarBuilt[] {
 /** 端支座 / 中间支座负筋 (上部，与贯通筋并排, 超出单排最大根数时分两排) */
 export function buildTopSupport(p: BeamParams, d: Derived): RebarBuilt[] {
   const out: RebarBuilt[] = [];
-  const { supportSlots, y, dStir, dMax } = topRowLayout(p);
+  const isErection = p.topBarType === 'erection';
+  const { supportSlots, y, dStir, dMax } = topRowLayout(p, isErection);
   const dThru = p.topThrough.diameter;
-  const nThru = p.topThrough.count;
-  const pickZ = (count: number) => {
+  const nThru = isErection ? 0 : p.topThrough.count;
+  const pickZ = (count: number, dia: number) => {
+    if (isErection) {
+      // 架立筋模式：支座负筋取外侧槽位（与 topRowLayout 统一计算）
+      if (count <= 2) {
+        // 2根时在箍筋弯折处（梁两侧边）
+        const inner = p.b / 2 - p.cover - dStir - dia / 2;
+        if (count === 2) return [-inner, inner];
+        return [0];
+      }
+      // >2根时从 supportSlots 取外侧槽位（架立筋在内侧）
+      const supLeft = Math.ceil(count / 2);
+      const supRight = count - supLeft;
+      return [...supportSlots.slice(0, supLeft), ...supportSlots.slice(supportSlots.length - supRight)];
+    }
+    // 贯通筋模式：原逻辑 — 用贯通筋之间的中间槽位
     if (count >= supportSlots.length) return supportSlots.slice();
     const start = Math.floor((supportSlots.length - count) / 2);
     return supportSlots.slice(start, start + count);
@@ -448,7 +514,7 @@ export function buildTopSupport(p: BeamParams, d: Derived): RebarBuilt[] {
       const xStartRow2 = !isEnd ? d.spans[i - 1].x1 - d.topSupportExtend[i - 1].right * 0.75 : undefined;
       // 第一排
       if (split.row1 > 0) {
-        const zs = pickZ(split.row1);
+        const zs = pickZ(split.row1, dia);
         zs.forEach((z) => drawSupBar(bundle, dia, z, y, xOuter, xEndRow1, 'L', isEnd, `第${i + 1}跨左支座负筋一排`, xStartRow1));
       }
       // 第二排 (端点改为 ln/4, 弯钩内缩 row2Inset)
@@ -471,7 +537,7 @@ export function buildTopSupport(p: BeamParams, d: Derived): RebarBuilt[] {
       const xStartRow1 = dsp.x1 - ext.right;                     // ln/3 (一排)
       const xStartRow2 = dsp.x1 - ext.right * 0.75;              // ln/4 (二排)
       if (split.row1 > 0) {
-        const zs = pickZ(split.row1);
+        const zs = pickZ(split.row1, dia);
         zs.forEach((z) => drawSupBar(bundle, dia, z, y, xOuter, xStartRow1, 'R', true, `第${i + 1}跨右支座负筋一排`));
       }
       if (split.row2 > 0) {

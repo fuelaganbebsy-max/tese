@@ -198,6 +198,7 @@ function SpanEditor({
   const row2CornerCount = Math.min(2, row2Count);
   const row2MidCount = Math.max(0, row2Count - 2);
   const topThrough = useBeamStore((s) => s.params.topThrough);
+  const topBarType = useBeamStore((s) => s.params.topBarType) ?? 'through';
   const setParams = useBeamStore((s) => s.setParams);
   const view = useBeamStore((s) => s.view);
   const setView = useBeamStore((s) => s.setView);
@@ -231,8 +232,25 @@ function SpanEditor({
             <span className="w-2 h-2 rounded-full bg-red-400 inline-block" />
             上部钢筋
           </div>
+          <div className="flex gap-1.5">
+            {([
+              { key: 'through' as const, label: '上部贯通筋' },
+              { key: 'erection' as const, label: '架立筋' },
+            ]).map((opt) => (
+              <button key={opt.key}
+                onClick={() => setParams((p) => ({ ...p, topBarType: opt.key }))}
+                className={`flex-1 py-1 rounded text-[10px] font-mono border transition-colors duration-150 ${
+                  topBarType === opt.key
+                    ? 'bg-primary-fixed-dim/20 border-primary-fixed-dim text-primary-fixed-dim'
+                    : 'bg-surface-container-lowest border-white/10 text-on-surface-variant hover:border-primary-fixed-dim/40'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
           <BundleEditor
-            label="上部贯通筋"
+            label={topBarType === 'erection' ? '架立筋（与支座负筋搭接 150mm）' : '上部贯通筋'}
             value={topThrough}
             onChange={(b) => setParams((p) => ({ ...p, topThrough: b }))}
           />

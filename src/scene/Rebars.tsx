@@ -6,6 +6,7 @@ import { buildBottom, buildMidBars, buildTieBars, buildTopSupport, buildTopThrou
 import { buildStirrupUnitGeometry } from '../geometry/buildStirrup';
 
 const REBAR_TOP_COLOR = '#ef5350';
+const REBAR_ERECTION_COLOR = '#ec407a'; // 架立筋 — 粉色（区别于支座负筋紫色）
 const REBAR_BOT_COLOR = '#ffa726';
 const REBAR_BOT2_CORNER_COLOR = '#42a5f5'; // 二排角筋（伸入柱弯锚）— 蓝色
 const REBAR_BOT2_MID_COLOR = '#66bb6a';    // 二排中间筋（直锚12d不弯折）— 绿色
@@ -56,7 +57,7 @@ export function Rebars() {
     <group>
       {top.map((r, i) => (
         <mesh key={`t-${i}`} geometry={r.geometry} renderOrder={1}>
-          <meshStandardMaterial color={REBAR_TOP_COLOR} metalness={0.7} roughness={0.35} envMapIntensity={1.2} />
+          <meshStandardMaterial color={r.kind === 'erection' ? REBAR_ERECTION_COLOR : REBAR_TOP_COLOR} metalness={0.7} roughness={0.35} envMapIntensity={1.2} />
         </mesh>
       ))}
       {bot.map((r, i) => {
