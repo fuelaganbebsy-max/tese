@@ -10,14 +10,16 @@ export function tubeFromPolyline(
   radius: number,
   radialSegments = 8,
   bendRadius?: number,
+  maxSegmentLen = 6,
 ): THREE.BufferGeometry {
   if (points.length < 2) return new THREE.BufferGeometry();
   const r = bendRadius ?? radius * 4;
   const path = new THREE.CurvePath<THREE.Vector3>();
 
-  // 预计算每个内部顶点的圆角进入点 / 离开点
+  // 预计算每个内部顶点的真实圆弧倒角（恒定半径 r，进入点 / 离开点 / 弧上采样点）
   const entry: THREE.Vector3[] = new Array(points.length);
   const exit: THREE.Vector3[] = new Array(points.length);
+  const arcPts: (THREE.Vector3[] | null)[] = new Array(points.length).fill(null);
   for (let i = 1; i < points.length - 1; i++) {
     const cur = points[i];
     const d1 = new THREE.Vector3().subVectors(points[i - 1], cur);
@@ -37,9 +39,32 @@ export function tubeFromPolyline(
       exit[i] = cur.clone();
       continue;
     }
-    const t = Math.min(r, l1 / 2, l2 / 2);
-    entry[i] = cur.clone().addScaledVector(d1, t);
-    exit[i] = cur.clone().addScaledVector(d2, t);
+    // 夹角 θ；恒定弯曲半径 r 所需切线长 t = r / tan(θ/2)，受相邻段长一半限制
+    const theta = d1.angleTo(d2);
+    const half = theta / 2;
+    const t = Math.min(r / Math.tan(half), l1 / 2, l2 / 2);
+    const arcR = t * Math.tan(half); // 实际弯曲半径（未被截断时即为 r）
+    const e = cur.clone().addScaledVector(d1, t);
+    const x = cur.clone().addScaledVector(d2, t);
+    entry[i] = e;
+    exit[i] = x;
+    // 圆心：沿角平分线方向，距角点 arcR / sin(θ/2)
+    const bis = d1.clone().add(d2).normalize();
+    const center = cur.clone().addScaledVector(bis, arcR / Math.sin(half));
+    const ve = e.clone().sub(center);
+    const vx = x.clone().sub(center);
+    const axis = new THREE.Vector3().crossVectors(ve, vx).normalize();
+    const sweep = ve.angleTo(vx);
+    if (sweep > 1e-4 && Number.isFinite(axis.x)) {
+      const steps = Math.max(4, Math.ceil(sweep / 0.1)); // ≈每段 5.7°
+      const pts: THREE.Vector3[] = [e.clone()];
+      for (let k = 1; k < steps; k++) {
+        const q = new THREE.Quaternion().setFromAxisAngle(axis, (sweep * k) / steps);
+        pts.push(ve.clone().applyQuaternion(q).add(center));
+      }
+      pts.push(x.clone());
+      arcPts[i] = pts;
+    }
   }
 
   let cursor = points[0].clone();
@@ -54,17 +79,23 @@ export function tubeFromPolyline(
       if (cursor.distanceTo(e) > 1e-6) {
         path.add(new THREE.LineCurve3(cursor.clone(), e.clone()));
       }
-      if (e.distanceTo(x) > 1e-6) {
-        path.add(new THREE.QuadraticBezierCurve3(e.clone(), points[i].clone(), x.clone()));
+      const pts = arcPts[i];
+      if (pts) {
+        for (let k = 0; k < pts.length - 1; k++) {
+          if (pts[k].distanceTo(pts[k + 1]) > 1e-6) {
+            path.add(new THREE.LineCurve3(pts[k].clone(), pts[k + 1].clone()));
+          }
+        }
+      } else if (e.distanceTo(x) > 1e-6) {
+        path.add(new THREE.LineCurve3(e.clone(), x.clone()));
       }
       cursor = x.clone();
     }
   }
 
-  // 段数：每段 ~15mm，保证圆角处足够光滑
-  let totalLen = 0;
-  for (let i = 0; i < points.length - 1; i++) totalLen += points[i].distanceTo(points[i + 1]);
-  const tubularSegments = Math.max(16, Math.min(800, Math.round(totalLen / 15)));
+  // 段数：取曲线真实长度（含圆角弧），按 maxSegmentLen 控制每段长度，保证弯钩等小半径圆角处足够光滑
+  const totalLen = path.getLength();
+  const tubularSegments = Math.max(24, Math.min(2000, Math.round(totalLen / maxSegmentLen)));
   return new THREE.TubeGeometry(path as unknown as THREE.Curve<THREE.Vector3>, tubularSegments, radius, radialSegments, false);
 }
 

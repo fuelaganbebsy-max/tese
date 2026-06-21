@@ -474,7 +474,7 @@ export function buildTopSupport(p: BeamParams, d: Derived): RebarBuilt[] {
 
   /** 渲染单根支座负筋 (含弯锚或直锚选择) */
   const drawSupBar = (
-    bundle: RebarBundle, dia: number, z: number,
+    _bundle: RebarBundle, dia: number, z: number,
     yRow: number, xOuter: number, xEnd: number, side: 'L' | 'R',
     isEnd: boolean, label: string,
     xStartIfMiddle?: number,

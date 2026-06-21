@@ -83,5 +83,15 @@ export const useColumnStore = create<ColumnStore>()(persist(
     name: 'rebar-3d-column',
     version: 1,
     partialize: (state) => ({ params: state.params, view: state.view }),
+    migrate: (persisted: any) => {
+      try {
+        // 后续版本升级时在此按版本补齐缺失字段，例如：
+        // if (persisted?.params && persisted.params.newField == null) persisted.params.newField = defaultValue;
+        return persisted;
+      } catch {
+        // 迁移失败时清除坏数据，使用全新默认值
+        return undefined;
+      }
+    },
   },
 ));

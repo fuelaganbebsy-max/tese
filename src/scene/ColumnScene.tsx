@@ -5,6 +5,9 @@ import * as THREE from 'three';
 import { deriveColumn } from '../domain/kz/derive';
 import type { ColumnParams } from '../domain/kz/types';
 import { useColumnStore } from '../store/columnStore';
+import { buildFreecadStirrupGeometry } from '../geometry/freecadStirrup';
+import { tubeFromPolyline } from '../geometry/rebarPath';
+import { stirrupHookStraight } from '../domain/codes/22G101';
 
 /** 柱子超出梁外侧的长度 (mm) — 下侧超出梁底面，上侧超出梁顶面 */
 const COLUMN_EXTEND = 500;
@@ -31,7 +34,7 @@ const BAR_COLORS = {
 } as const;
 
 // ─── 柱体混凝土 ───────────────────────────────────────────
-function ColumnConcrete({ params, derived, show }: { params: ColumnParams; derived: ReturnType<typeof deriveColumn>; show: boolean }) {
+function ColumnConcrete({ params, show }: { params: ColumnParams; show: boolean }) {
   const geo = useMemo(() => {
     const totalH = colTotalH(params.Hn);
     const cy = colCenterY(params.Hn);
@@ -73,42 +76,84 @@ function ColumnLongBars({ params, derived, show }: { params: ColumnParams; deriv
   return <>{bars}</>;
 }
 
-// ─── 箍筋 ─────────────────────────────────────────────────
+// ─── 箍筋 (FreeCAD-Reinforcement getpointsOfStirrup 做法) ─────────
+/**
+ * 外箍筋 + 内部拉筋 (单肢箍)，几何位于 xy 平面 (z=法向螺旋偏移)，中心在原点。
+ * 外箍筋采用 FreeCAD 算法 (135° 弯钩 + 圆角 + 法向偏移)；内肢以带 135° 弯钩的拉筋表示。
+ */
 function buildRectLineGeometry(params: ColumnParams) {
   const c = params.cover + params.stirrup.diameter / 2;
   const halfW = (params.b - 2 * c) / 2;
   const halfH = (params.h - 2 * c) / 2;
   const d = params.stirrup.diameter;
-  const boxes: THREE.BufferGeometry[] = [];
-  for (const line of derivedLineFallback(params)) {
-    const len = Math.hypot(line.x2 - line.x1, line.y2 - line.y1);
-    const isVertical = Math.abs(line.x1 - line.x2) < 1e-6;
-    const g = isVertical
-      ? new THREE.BoxGeometry(d, len + d, d)
-      : new THREE.BoxGeometry(len + d, d, d);
-    g.translate((line.x1 + line.x2) / 2, (line.y1 + line.y2) / 2, 0);
-    boxes.push(g);
+  const bentFactor = stirrupHookStraight(d) / d;
+
+  const geos: THREE.BufferGeometry[] = [];
+
+  // 外箍筋 (中心线尺寸 = 2·half)
+  geos.push(
+    buildFreecadStirrupGeometry({
+      width: halfW * 2,
+      height: halfH * 2,
+      diameter: d,
+      bentAngle: 135,
+      bentFactor,
+      rounding: 2,
+    }),
+  );
+
+  // 内部拉筋
+  for (const tie of derivedTieLegs(params)) {
+    geos.push(buildTieLeg(tie, d, bentFactor));
   }
-  if (boxes.length === 0) {
-    const g = new THREE.BoxGeometry(halfW * 2 + d, d, d);
-    g.translate(0, halfH, 0);
-    boxes.push(g);
-  }
-  return mergeGeometries(boxes);
+
+  return mergeGeometries(geos);
 }
 
-function derivedLineFallback(params: ColumnParams) {
+/** 单根拉筋 (两端 135° 弯钩) 几何，位于 xy 平面 (z=0) */
+function buildTieLeg(
+  tie: { x1: number; y1: number; x2: number; y2: number },
+  d: number,
+  bentFactor: number,
+): THREE.BufferGeometry {
+  const bendR = d * 2;
+  const hookLen = bentFactor * d + bendR;
+  const e = hookLen / Math.SQRT2; // 135° 弯钩对角投影
+  const isVertical = Math.abs(tie.x1 - tie.x2) < 1e-6;
+  let pts: THREE.Vector3[];
+  if (isVertical) {
+    // 竖向拉筋: 端点弯钩朝截面内侧 (沿 +x) 斜伸
+    const x = tie.x1;
+    const yTop = Math.max(tie.y1, tie.y2);
+    const yBot = Math.min(tie.y1, tie.y2);
+    pts = [
+      new THREE.Vector3(x + e, yTop - e, 0),
+      new THREE.Vector3(x, yTop, 0),
+      new THREE.Vector3(x, yBot, 0),
+      new THREE.Vector3(x + e, yBot + e, 0),
+    ];
+  } else {
+    const y = tie.y1;
+    const xR = Math.max(tie.x1, tie.x2);
+    const xL = Math.min(tie.x1, tie.x2);
+    pts = [
+      new THREE.Vector3(xR - e, y + e, 0),
+      new THREE.Vector3(xR, y, 0),
+      new THREE.Vector3(xL, y, 0),
+      new THREE.Vector3(xL + e, y + e, 0),
+    ];
+  }
+  return tubeFromPolyline(pts, d / 2, 14, bendR, 3);
+}
+
+/** 内部拉筋的位置 (不含外周边) */
+function derivedTieLegs(params: ColumnParams) {
   const c = params.cover + params.stirrup.diameter / 2;
   const halfW = (params.b - 2 * c) / 2;
   const halfH = (params.h - 2 * c) / 2;
   const legsX = Math.max(2, Math.round(params.stirrup.legsX ?? (params.stirrup.legs === 4 ? 3 : 2)));
   const legsY = Math.max(2, Math.round(params.stirrup.legsY ?? (params.stirrup.legs === 4 ? 3 : 2)));
-  const lines = [
-    { x1: -halfW, y1: halfH, x2: halfW, y2: halfH },
-    { x1: halfW, y1: halfH, x2: halfW, y2: -halfH },
-    { x1: halfW, y1: -halfH, x2: -halfW, y2: -halfH },
-    { x1: -halfW, y1: -halfH, x2: -halfW, y2: halfH },
-  ];
+  const lines: { x1: number; y1: number; x2: number; y2: number }[] = [];
   for (let i = 1; i < legsX - 1; i++) {
     const x = -halfW + (2 * halfW * i) / (legsX - 1);
     lines.push({ x1: x, y1: halfH, x2: x, y2: -halfH });
@@ -331,7 +376,7 @@ export function ColumnScene() {
       <Environment preset="city" background={false} />
 
       <ColumnBeams params={params} />
-      <ColumnConcrete params={params} derived={derived} show={view.showConcrete} />
+      <ColumnConcrete params={params} show={view.showConcrete} />
       <ColumnLongBars params={params} derived={derived} show={view.showLongitudinal} />
       <ColumnStirrups params={params} derived={derived} show={view.showStirrups} />
 

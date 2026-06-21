@@ -1,6 +1,6 @@
 import { Canvas, useThree } from '@react-three/fiber';
 import { OrbitControls, GizmoHelper, GizmoViewport, Grid, Environment } from '@react-three/drei';
-import { useMemo, useEffect, useRef } from 'react';
+import { useMemo, useEffect } from 'react';
 import * as THREE from 'three';
 import { useBeamStore } from '../store/beamStore';
 import { derive } from '../domain/kl/derive';
@@ -12,7 +12,6 @@ import { BeamAnnotations } from './BeamAnnotations';
 
 function CameraController({ center, camDist, h }: { center: [number, number, number]; camDist: number; h: number }) {
   const { camera } = useThree();
-  const controlsRef = useRef<any>(null);
   const cmd = useBeamStore((s) => s.cameraCommand);
   const clearCmd = useBeamStore((s) => s.setCameraCommand);
 

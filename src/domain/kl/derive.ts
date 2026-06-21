@@ -74,8 +74,6 @@ export function derive(p: BeamParams): Derived {
   // 上部贯通弯锚（按上部贯通钢筋直径计算，端支座宽度按首/尾跨）
   const tt = p.topThrough;
   const taLaE = laE(tt.grade, tt.diameter, p.concrete, p.seismic);
-  const taH = Math.max(bendAnchorStraightMin(tt.grade, tt.diameter, p.concrete, p.seismic),
-                       Math.max(firstSpan.hcLeft, lastSpan.hcRight) - p.cover);
   // 实际水平段取 支座宽 - 保护层 (示意)
   const horizontal = Math.max(firstSpan.hcLeft, lastSpan.hcRight) - p.cover;
   const topAnchor = {

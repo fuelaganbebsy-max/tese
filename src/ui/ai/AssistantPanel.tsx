@@ -32,8 +32,6 @@ export default function AssistantPanel() {
   const panelOpen = useAiStore((s) => s.panelOpen);
   const messages = useAiStore((s) => s.messages);
   const isStreaming = useAiStore((s) => s.isStreaming);
-  const activeProviderId = useAiStore((s) => s.activeProviderId);
-  const apiKeys = useAiStore((s) => s.apiKeys);
   const clearMessages = useAiStore((s) => s.clearMessages);
   const lastGuardrailError = useAiStore((s) => s.lastGuardrailError);
   const beamParams = useBeamStore((s) => s.params);

@@ -1,29 +1,30 @@
 import * as THREE from 'three';
 import type { BeamParams } from '../domain/kl/types';
 import { stirrupHookStraight } from '../domain/codes/22G101';
-import { tubeFromPolyline } from './rebarPath';
+import { buildFreecadStirrupGeometry } from './freecadStirrup';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
-/** 构造单个矩形闭合箍筋几何 (在 yz 平面, x=0)
- *  弯钩闭合点位于 顶-左 角 (与剖切面图一致), 两根钩尾从顶-左角向梁内 45° 斜伸 */
+/**
+ * 构造单个矩形闭合箍筋几何 (FreeCAD-Reinforcement getpointsOfStirrup 做法)。
+ * freecadStirrup 在 x=宽 / y=高 / z=法向 平面生成 (中心在原点);
+ * 此处旋转到梁剖面 yz 平面 (法向沿 x), 并平移到梁高中心。
+ */
 function buildRectStirrup(
-  yBot: number, yTop: number, zL: number, zR: number,
-  ds: number, hook: number, bendR: number,
+  width: number, height: number, centerY: number,
+  ds: number, bentFactor: number,
 ): THREE.BufferGeometry {
-  const tail = hook + bendR;
-  const kt = tail / Math.SQRT2;
-  const lap = 5 * ds + 2 * bendR;
-  const pts: THREE.Vector3[] = [
-    new THREE.Vector3(0, yTop - kt, zL + kt),         // P0 钩A末端 (向梁内右下 45°)
-    new THREE.Vector3(0, yTop, zL),                   // A  顶-左角
-    new THREE.Vector3(0, yTop, zR),                   // B  顶-右角
-    new THREE.Vector3(0, yBot, zR),                   // C  底-右角
-    new THREE.Vector3(0, yBot, zL),                   // D  底-左角
-    new THREE.Vector3(0, yTop, zL),                   // A2 回到顶-左角
-    new THREE.Vector3(0, yTop, zL + lap),             // S  沿顶边搭接段
-    new THREE.Vector3(0, yTop - kt, zL + lap + kt),   // P1 钩B末端 (与P0平行, 错开 lap)
-  ];
-  return tubeFromPolyline(pts, ds / 2, 6, bendR);
+  const geo = buildFreecadStirrupGeometry({
+    width,
+    height,
+    diameter: ds,
+    bentAngle: 135,
+    bentFactor,
+    rounding: 2,
+  });
+  // 宽方向(x)→梁宽(z)、法向(z)→梁长(x)、高(y)不变
+  geo.rotateY(Math.PI / 2);
+  geo.translate(0, centerY, 0);
+  return geo;
 }
 
 /**
@@ -34,23 +35,17 @@ export function buildStirrupUnitGeometry(p: BeamParams): THREE.BufferGeometry {
   const sp = p.spans[0];
   const ds = sp.stirrup.diameter;
   const cover = p.cover;
-  const innerW = p.b - 2 * cover - ds;
-  const innerH = p.h - 2 * cover - ds;
-  const yBot = cover + ds / 2;
-  const yTop = yBot + innerH;
-  const zL = -innerW / 2;
-  const zR = +innerW / 2;
-  const hook = stirrupHookStraight(ds);
-  const bendR = ds * 2;
+  const innerW = p.b - 2 * cover - ds;   // 箍筋中心线宽
+  const innerH = p.h - 2 * cover - ds;   // 箍筋中心线高
+  const centerY = p.h / 2;               // 梁高中心
+  // 弯钩直段 ≥ max(10d,75) → 折算 bentFactor (钩长 ≈ tangent_length + bentFactor·d)
+  const bentFactor = stirrupHookStraight(ds) / ds;
 
-  const outer = buildRectStirrup(yBot, yTop, zL, zR, ds, hook, bendR);
+  const outer = buildRectStirrup(innerW, innerH, centerY, ds, bentFactor);
 
   if (sp.stirrup.legs === 4) {
-    // 内部小箍筋: 拉结中部两根主筋, 宽度约 innerW 的一半, y 同外箍筋
-    const innerHalfW = innerW / 4;       // 内箍筋半宽
-    const innerZL = -innerHalfW;
-    const innerZR = +innerHalfW;
-    const inner = buildRectStirrup(yBot, yTop, innerZL, innerZR, ds, hook, bendR);
+    // 内部小箍筋: 拉结中部两根主筋, 宽度约 innerW 的一半, 高同外箍筋
+    const inner = buildRectStirrup(innerW / 2, innerH, centerY, ds, bentFactor);
     return mergeGeometries([outer, inner]) ?? outer;
   }
 

@@ -9,10 +9,8 @@
 import type { ComponentType } from 'react';
 import { BeamScene } from './scene/BeamScene';
 import { ColumnScene } from './scene/ColumnScene';
-import {
-  BeamParamContent,
-  ColumnParamContent,
-} from './ui/ParamPanel';
+import { BeamParamContent } from './ui/param/BeamParamContent';
+import { ColumnParamContent } from './ui/param/ColumnParamContent';
 import {
   BeamDataContent,
   ColumnDataContent,

@@ -54,3 +54,15 @@ export function maxTopBarsPerRow(width: number, dia: number, cover: number): num
   const d = nearest(DIAMETERS, dia);
   return table[w][d.idx];
 }
+
+/** 梁纵向钢筋单排最大根数（按梁宽、保护层、箍筋直径、纵筋直径、箍筋肢数公式估算） */
+export function maxBarsPerRow(b: number, cover: number, stirrupDia: number, barDia: number, legs: number): number {
+  // 可用净宽 = 梁宽 - 两侧(保护层+箍筋直径) - 内部箍筋竖肢占位
+  const innerLegs = Math.max(0, legs / 2 - 1);
+  const available = b - 2 * (cover + stirrupDia) - innerLegs * stirrupDia;
+  // 最小净距: max(25, barDia)
+  const minSpacing = Math.max(25, barDia);
+  // n根筋需要: n*barDia + (n-1)*minSpacing ≤ available
+  const n = Math.floor((available + minSpacing) / (barDia + minSpacing));
+  return Math.max(1, n);
+}

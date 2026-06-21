@@ -1,4 +1,3 @@
-// Force Vite re-hash (2)
 import { useMemo, useState, useRef, useCallback } from 'react';
 import { useBeamStore } from '../store/beamStore';
 import { useColumnStore } from '../store/columnStore';
@@ -48,7 +47,6 @@ function ColumnSectionView() {
   const H = Math.min(W * Math.max(aspect, 1), 240);
   const innerPad = 14;
   const scale = (W - innerPad * 2) / dim;
-  const c = params.cover * scale;
   const toSvgX = (x: number) => innerPad + (x + params.b / 2) * scale;
   const toSvgY = (y: number) => innerPad + (params.h / 2 - y) * scale;
   const cornerBars = derived.barPositions.filter((pos) => pos.kind === 'corner');
@@ -106,14 +104,28 @@ function ColumnSectionView() {
               {line.kind === 'crossTie' && (() => {
                 const hookLen = 4 * params.stirrup.diameter * scale;
                 const hd = hookLen * Math.SQRT1_2;
-                const x1 = toSvgX(line.x1);
-                const y1 = toSvgY(line.y1);
-                const x2 = toSvgX(line.x2);
-                const y2 = toSvgY(line.y2);
+                const sx1 = toSvgX(line.x1);
+                const sy1 = toSvgY(line.y1);
+                const sx2 = toSvgX(line.x2);
+                const sy2 = toSvgY(line.y2);
                 const vertical = Math.abs(line.x1 - line.x2) < 1e-6;
-                return vertical
-                  ? <line x1={x1} y1={y1} x2={x1 + hd} y2={y1 + hd} stroke="#607d8b" strokeWidth={1.5} strokeLinecap="round" />
-                  : <line x1={x1} y1={y1} x2={x1 + hd} y2={y1 + hd} stroke="#607d8b" strokeWidth={1.5} strokeLinecap="round" />;
+                // 两端各画一个 135° 弯钩：沿拉筋方向折回截面内侧，垂直分量取同一侧
+                const hooks = vertical
+                  ? [
+                      { x: sx1, y: sy1, dx: hd, dy: sy1 < sy2 ? hd : -hd },
+                      { x: sx2, y: sy2, dx: hd, dy: sy2 < sy1 ? hd : -hd },
+                    ]
+                  : [
+                      { x: sx1, y: sy1, dx: sx1 < sx2 ? hd : -hd, dy: hd },
+                      { x: sx2, y: sy2, dx: sx2 < sx1 ? hd : -hd, dy: hd },
+                    ];
+                return (
+                  <>
+                    {hooks.map((hk, hi) => (
+                      <line key={hi} x1={hk.x} y1={hk.y} x2={hk.x + hk.dx} y2={hk.y + hk.dy} stroke="#607d8b" strokeWidth={1.5} strokeLinecap="round" />
+                    ))}
+                  </>
+                );
               })()}
             </g>
           ))}

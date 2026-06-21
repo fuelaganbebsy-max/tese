@@ -1,5 +1,4 @@
-// Force Vite re-hash
-import { useEffect, useState, useCallback, lazy, Suspense } from 'react';
+import { useEffect, useState, useCallback, Suspense } from 'react';
 import { PlaceholderScene } from './scene/PlaceholderScene';
 import { ParamPanel } from './ui/ParamPanel';
 import { TopBar } from './ui/TopBar';
@@ -12,8 +11,9 @@ import { useColumnStore } from './store/columnStore';
 import { useMemberStore } from './store/memberStore';
 import { MEMBER_TYPES, getMemberEntry } from './memberRegistry';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
+import { lazyWithReload } from './lazyWithReload';
 
-const AssistantPanel = lazy(() => import('./ui/ai/AssistantPanel'));
+const AssistantPanel = lazyWithReload(() => import('./ui/ai/AssistantPanel'));
 
 const MEMBERS_WITH_UI = MEMBER_TYPES;
 

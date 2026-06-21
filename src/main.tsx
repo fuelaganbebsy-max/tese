@@ -1,27 +1,21 @@
-import React, { lazy, Suspense, useState } from 'react';
+import React, { Suspense, useState } from 'react';
 import ReactDOM from 'react-dom/client';
 import { LandingPage } from './ui/LandingPage';
 import './index.css';
+import { lazyWithReload } from './lazyWithReload';
 
-const App = lazy(() => import('./App'));
+const App = lazyWithReload(() => import('./App'));
 
-// 防止旧 localStorage 数据导致白屏：版本不匹配或数据损坏时清除
-try {
-  const CURRENT_VERSION = 7;
-  ['rebar-3d-beam', 'rebar-3d-column'].forEach((key) => {
+// 仅在数据损坏（无法解析）时清除；版本迁移交由 zustand persist 的 migrate 处理
+['rebar-3d-beam', 'rebar-3d-column'].forEach((key) => {
+  try {
     const raw = localStorage.getItem(key);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (!parsed?.state?.params || parsed?.version !== CURRENT_VERSION) {
-        localStorage.removeItem(key);
-        console.warn(`[store] Cleared stale ${key} (version ${parsed?.version} → ${CURRENT_VERSION})`);
-      }
-    }
-  });
-} catch {
-  localStorage.removeItem('rebar-3d-beam');
-  localStorage.removeItem('rebar-3d-column');
-}
+    if (raw) JSON.parse(raw);
+  } catch {
+    localStorage.removeItem(key);
+    console.warn(`[store] Cleared corrupted ${key}`);
+  }
+});
 
 class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { error: Error | null }> {
   state = { error: null as Error | null };

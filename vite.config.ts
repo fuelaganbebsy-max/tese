@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react';
 import path from 'path';
 
 export default defineConfig({
-  // GitHub Pages 项目站点访问路径: https://<user>.github.io/tese1/
+  // GitHub Pages 项目站点访问路径: https://<user>.github.io/tese/
   base: process.env.GITHUB_ACTIONS ? '/tese/' : '/',
   plugins: [react()],
   resolve: {

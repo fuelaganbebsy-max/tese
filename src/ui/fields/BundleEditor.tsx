@@ -1,16 +1,21 @@
 import type { RebarGrade } from '../../domain/kl/types';
 
-const COMMON_DIA = [6, 8, 10, 12, 14, 16, 18, 20, 22, 25, 28, 32];
-const GRADES: RebarGrade[] = ['HPB300', 'HRB400', 'HRB500'];
+export const COMMON_DIA = [6, 8, 10, 12, 14, 16, 18, 20, 22, 25, 28, 32];
+export const STIRRUP_DIA = [6, 8, 10, 12];
+export const GRADES: RebarGrade[] = ['HPB300', 'HRB400', 'HRB500'];
 
 export function BundleEditor({
   label,
   value,
   onChange,
+  evenOnly = false,
+  diaOptions = COMMON_DIA,
 }: {
   label: string;
   value: { grade: RebarGrade; diameter: number; count: number };
   onChange: (b: { grade: RebarGrade; diameter: number; count: number }) => void;
+  evenOnly?: boolean;
+  diaOptions?: readonly number[];
 }) {
   return (
     <div className="flex flex-col gap-1.5">
@@ -35,17 +40,22 @@ export function BundleEditor({
           value={value.diameter}
           onChange={(e) => onChange({ ...value, diameter: Number(e.target.value) })}
         >
-          {COMMON_DIA.map((d) => (
+          {diaOptions.map((d) => (
             <option key={d} value={d}>⌀{d}</option>
           ))}
         </select>
         <input
           type="number"
-          min={1}
+          min={evenOnly ? 2 : 1}
           max={20}
+          step={evenOnly ? 2 : 1}
           className="bg-surface-container-lowest border border-white/10 rounded focus:border-primary-fixed-dim h-7 px-2 font-mono text-[10px] text-on-surface text-center"
           value={value.count}
-          onChange={(e) => onChange({ ...value, count: Math.max(1, Number(e.target.value)) })}
+          onChange={(e) => {
+            let n = Math.max(evenOnly ? 2 : 1, Number(e.target.value));
+            if (evenOnly && n % 2 !== 0) n += 1;
+            onChange({ ...value, count: n });
+          }}
         />
       </div>
     </div>

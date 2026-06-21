@@ -8,7 +8,6 @@ import {
   MEMBER_LABELS,
   MEMBER_ICONS,
   MEMBER_STATUS,
-  getParentType,
   type MemberType,
 } from '../config';
 
@@ -39,8 +38,6 @@ export function SideNav({ onBack }: { onBack?: () => void }) {
       loadSubtype(type);
     }
   };
-
-  const parentFor = (t: MemberType) => getParentType(t);
 
   if (collapsed) {
     return (

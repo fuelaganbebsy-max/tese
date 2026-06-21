@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>FreeCAD 箍筋 Skill — Demo</title>
+    <style>
+      html, body { margin: 0; height: 100%; background: #121212; overflow: hidden; }
+      #app { width: 100vw; height: 100vh; }
+      #hud {
+        position: fixed; top: 12px; left: 12px; color: #cfd8dc;
+        font: 13px/1.5 system-ui, sans-serif; pointer-events: none;
+        text-shadow: 0 1px 2px #000; max-width: 360px;
+      }
+      #hud b { color: #4fc3f7; }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <div id="hud">
+      <div><b>FreeCAD 箍筋 Skill — Demo</b></div>
+      <div>左：梁箍筋 (300×600, 4 肢) ｜ 右：柱箍筋 (500×500, 3×3 肢)</div>
+      <div>拖拽旋转 / 滚轮缩放。重点看 135° 弯钩与搭接处。</div>
+    </div>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>
