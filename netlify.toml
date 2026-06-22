@@ -1,6 +1,21 @@
 [build]
   command = "npm run build"
   publish = "dist"
+  functions = "netlify/functions"
+
+[functions]
+  node_bundler = "esbuild"
+
+# Let API function calls reach the serverless functions before the SPA fallback.
+[[redirects]]
+  from = "/api/schools"
+  to = "/.netlify/functions/schools"
+  status = 200
+
+[[redirects]]
+  from = "/api/login"
+  to = "/.netlify/functions/login"
+  status = 200
 
 [[redirects]]
   from = "/*"

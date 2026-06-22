@@ -1,8 +1,23 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import {
+  fetchSchools,
+  login as loginRequest,
+  credentialsComplete,
+  type School,
+} from '../auth/api';
+import { makeSession, saveSession } from '../auth/session';
 
 interface Props {
   onEnter: () => void;
 }
+
+const ERROR_TEXT: Record<string, string> = {
+  not_authorized: '学校、姓名或学号/工号不匹配，请核对后重试。',
+  invalid_input: '请填写学校、姓名和学号/工号。',
+  server_error: '服务暂时不可用，请稍后再试。',
+  network_error: '网络异常，无法连接服务器。',
+  schools_unavailable: '学校列表加载失败，请刷新重试。',
+};
 
 const FEATURES = [
   {
@@ -39,10 +54,52 @@ const FEATURES = [
 
 export function LandingPage({ onEnter }: Props) {
   const [leaving, setLeaving] = useState(false);
+  const [schools, setSchools] = useState<School[]>([]);
+  const [schoolsError, setSchoolsError] = useState(false);
+  const [schoolId, setSchoolId] = useState('');
+  const [name, setName] = useState('');
+  const [identityCode, setIdentityCode] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    fetchSchools()
+      .then((list) => {
+        if (alive) setSchools(list);
+      })
+      .catch(() => {
+        if (alive) setSchoolsError(true);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const canSubmit =
+    !submitting && credentialsComplete({ schoolId, name, identityCode });
 
   const handleEnter = () => {
     setLeaving(true);
     setTimeout(onEnter, 320);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    if (!credentialsComplete({ schoolId, name, identityCode })) {
+      setError(ERROR_TEXT.invalid_input);
+      return;
+    }
+    setSubmitting(true);
+    const result = await loginRequest({ schoolId, name, identityCode });
+    setSubmitting(false);
+    if (result.ok) {
+      saveSession(makeSession(result.school, result.name));
+      handleEnter();
+    } else {
+      setError(ERROR_TEXT[result.reason] ?? ERROR_TEXT.server_error);
+    }
   };
 
   return (
@@ -114,17 +171,73 @@ export function LandingPage({ onEnter }: Props) {
           纯前端运行，无需安装，无需后端，开箱即用。
         </p>
 
-        {/* CTA */}
-        <div className="flex flex-wrap gap-4 justify-center">
+        {/* Login card */}
+        <form
+          onSubmit={handleSubmit}
+          className="w-full max-w-sm rounded-2xl border border-white/10 bg-surface-container/80 backdrop-blur-md p-6 text-left shadow-2xl"
+          style={{ borderColor: 'rgba(0,218,243,0.15)' }}
+        >
+          <div className="flex items-center gap-2 mb-5 text-on-surface font-semibold">
+            <span className="material-symbols-outlined text-primary-fixed-dim text-[20px]">login</span>
+            登录以进入系统
+          </div>
+
+          <label className="block text-body-sm text-on-surface-variant mb-1.5">学校</label>
+          <select
+            value={schoolId}
+            onChange={(e) => setSchoolId(e.target.value)}
+            disabled={schoolsError}
+            className="w-full mb-4 px-3 py-2.5 rounded-DEFAULT bg-background/60 border border-white/10 text-on-surface text-body-md focus:outline-none focus:border-primary-fixed-dim disabled:opacity-50"
+          >
+            <option value="" disabled>
+              {schoolsError ? '学校列表加载失败' : '请选择学校'}
+            </option>
+            {schools.map((s) => (
+              <option key={String(s.id)} value={String(s.id)}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+
+          <label className="block text-body-sm text-on-surface-variant mb-1.5">姓名</label>
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="请输入姓名"
+            autoComplete="off"
+            className="w-full mb-4 px-3 py-2.5 rounded-DEFAULT bg-background/60 border border-white/10 text-on-surface text-body-md focus:outline-none focus:border-primary-fixed-dim placeholder:text-on-surface-variant/50"
+          />
+
+          <label className="block text-body-sm text-on-surface-variant mb-1.5">学号 / 工号</label>
+          <input
+            type="text"
+            value={identityCode}
+            onChange={(e) => setIdentityCode(e.target.value)}
+            placeholder="请输入学号或工号"
+            autoComplete="off"
+            className="w-full mb-2 px-3 py-2.5 rounded-DEFAULT bg-background/60 border border-white/10 text-on-surface text-body-md focus:outline-none focus:border-primary-fixed-dim placeholder:text-on-surface-variant/50"
+          />
+
+          {error && (
+            <p className="flex items-center gap-1.5 text-error text-body-sm mb-2" style={{ color: '#ff6b6b' }}>
+              <span className="material-symbols-outlined text-[16px]">error</span>
+              {error}
+            </p>
+          )}
+
           <button
-            onClick={handleEnter}
-            className="flex items-center gap-2 px-8 py-3 rounded-DEFAULT bg-primary-fixed-dim text-on-primary font-semibold text-body-md hover:bg-primary-fixed transition-all duration-200 active:scale-95 shadow-lg"
+            type="submit"
+            disabled={!canSubmit}
+            className="mt-2 w-full flex items-center justify-center gap-2 px-8 py-3 rounded-DEFAULT bg-primary-fixed-dim text-on-primary font-semibold text-body-md hover:bg-primary-fixed transition-all duration-200 active:scale-95 shadow-lg disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100"
             style={{ boxShadow: '0 0 24px rgba(0,218,243,0.25)' }}
           >
-            <span className="material-symbols-outlined text-[18px]">rocket_launch</span>
-            立即开始
+            <span className="material-symbols-outlined text-[18px]">
+              {submitting ? 'progress_activity' : 'rocket_launch'}
+            </span>
+            {submitting ? '登录中…' : '登录并进入'}
           </button>
-        </div>
+        </form>
 
         {/* Scroll hint */}
         <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1 text-on-surface-variant/50 text-body-sm animate-bounce">
