@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { BeamParams, RebarBundle } from '../domain/kl/types';
+import type { BeamParams, RebarBundle, RebarGrade } from '../domain/kl/types';
 import type { Derived } from '../domain/kl/derive';
 import { tubeFromPolyline } from './rebarPath';
 import { laE, stirrupHookStraight } from '../domain/codes/22G101';
@@ -19,10 +19,17 @@ export const ERECTION_LAP = 150;
 
 export interface RebarBuilt {
   geometry: THREE.BufferGeometry;
-  /** 元数据，用于标注 */
-  meta: { label: string; length: number };
+  /** 元数据，用于标注与下料简图 */
+  meta: { label: string; length: number; points?: THREE.Vector3[]; diameter?: number; grade?: RebarGrade };
   /** 钢筋类别，用于渲染时区分颜色 */
   kind?: RebarKind;
+}
+
+/** 构造 RebarBuilt.meta：保留中心线折线点与规格，供下料简图使用 */
+function mkMeta(label: string, pts: THREE.Vector3[], diameter: number, grade: RebarGrade): RebarBuilt['meta'] {
+  let length = 0;
+  for (let k = 1; k < pts.length; k++) length += pts[k].distanceTo(pts[k - 1]);
+  return { label, length, points: pts.map((p) => p.clone()), diameter, grade };
 }
 
 const DEFAULT_STIRRUP_DIA = 10; // 用于计算钢筋净位置；从 stirrup 实际值校正
@@ -131,7 +138,7 @@ export function buildTopThrough(p: BeamParams, d: Derived): RebarBuilt[] {
         ];
         out.push({
           geometry: tubeFromPolyline(pts, dia / 2),
-          meta: { label: `第${i + 1}跨架立筋 ${k + 1}/${p.topThrough.count}`, length: xRight - xLeft },
+          meta: mkMeta(`第${i + 1}跨架立筋 ${k + 1}/${p.topThrough.count}`, pts, dia, p.topThrough.grade),
           kind: 'erection',
         });
       });
@@ -153,7 +160,7 @@ export function buildTopThrough(p: BeamParams, d: Derived): RebarBuilt[] {
     ];
     return {
       geometry: tubeFromPolyline(pts, dia / 2),
-      meta: { label: `上部贯通筋 ${i + 1}/${p.topThrough.count}`, length: pts.reduce((s, _, k) => k > 0 ? s + pts[k].distanceTo(pts[k-1]) : s, 0) },
+      meta: mkMeta(`上部贯通筋 ${i + 1}/${p.topThrough.count}`, pts, dia, p.topThrough.grade),
       kind: 'top',
     };
   });
@@ -191,7 +198,7 @@ export function buildBottom(p: BeamParams, d: Derived): RebarBuilt[] {
       ];
       out.push({
         geometry: tubeFromPolyline(pts, dia / 2),
-        meta: { label: `第${i + 1}跨下部一排 ${k + 1}/${sp.bottom.count}`, length: 0 },
+        meta: mkMeta(`第${i + 1}跨下部一排 ${k + 1}/${sp.bottom.count}`, pts, dia, sp.bottom.grade),
       });
     });
 
@@ -221,7 +228,7 @@ export function buildBottom(p: BeamParams, d: Derived): RebarBuilt[] {
           ];
           out.push({
             geometry: tubeFromPolyline(pts, dia2 / 2),
-            meta: { label: `第${i + 1}跨下部二排角筋 ${k + 1}/${sp.bottomRow2!.count}`, length: 0 },
+            meta: mkMeta(`第${i + 1}跨下部二排角筋 ${k + 1}/${sp.bottomRow2!.count}`, pts, dia2, sp.bottomRow2!.grade),
             kind: 'bottom2-corner',
           });
         } else {
@@ -235,7 +242,7 @@ export function buildBottom(p: BeamParams, d: Derived): RebarBuilt[] {
             ];
             out.push({
               geometry: tubeFromPolyline(pts, dia2 / 2),
-              meta: { label: `第${i + 1}跨下部二排中间筋 ${k + 1}/${sp.bottomRow2!.count}`, length: 0 },
+              meta: mkMeta(`第${i + 1}跨下部二排中间筋 ${k + 1}/${sp.bottomRow2!.count}`, pts, dia2, sp.bottomRow2!.grade),
               kind: 'bottom2-corner', // 伸入支座时颜色同角筋
             });
           } else {
@@ -249,7 +256,7 @@ export function buildBottom(p: BeamParams, d: Derived): RebarBuilt[] {
             ];
             out.push({
               geometry: tubeFromPolyline(pts, dia2 / 2),
-              meta: { label: `第${i + 1}跨下部二排中间筋 ${k + 1}/${sp.bottomRow2!.count}`, length: 0 },
+              meta: mkMeta(`第${i + 1}跨下部二排中间筋 ${k + 1}/${sp.bottomRow2!.count}`, pts, dia2, sp.bottomRow2!.grade),
               kind: 'bottom2-mid',
             });
           }
@@ -354,7 +361,7 @@ export function buildMidBars(p: BeamParams, d: Derived): RebarBuilt[] {
         }
         out.push({
           geometry: tubeFromPolyline(pts, dia / 2),
-          meta: { label: `第${i + 1}跨${midType === 'torsion' ? '扭筋' : '构造筋'} ${name}侧 ${j + 1}/${n}`, length: 0 },
+          meta: mkMeta(`第${i + 1}跨${midType === 'torsion' ? '扭筋' : '构造筋'} ${name}侧 ${j + 1}/${n}`, pts, dia, bundle.grade),
           kind,
         });
       }
@@ -371,6 +378,7 @@ export function buildMidBars(p: BeamParams, d: Derived): RebarBuilt[] {
  */
 export function buildTieBars(p: BeamParams, d: Derived): RebarBuilt[] {
   const geoms: THREE.BufferGeometry[] = [];
+  let tieRep: { pts: THREE.Vector3[]; dia: number; grade: RebarGrade } | undefined;
   for (let i = 0; i < p.spans.length; i++) {
     const sp = p.spans[i];
     if (!sp.midBarEnabled) continue;
@@ -434,13 +442,18 @@ export function buildTieBars(p: BeamParams, d: Derived): RebarBuilt[] {
           new THREE.Vector3(cx, y - kt, zRight - kt),  // 右端 135° 斜尾
         ];
         geoms.push(tubeFromPolyline(pts, tieDs / 2, 6, bendR));
+        if (!tieRep) tieRep = { pts, dia: tieDs, grade: sp.stirrup.grade };
       }
     }
   }
   if (geoms.length === 0) return [];
   const merged = mergeGeometries(geoms);
   if (!merged) return [];
-  return [{ geometry: merged, meta: { label: '拉筋', length: 0 }, kind: 'tie' }];
+  return [{
+    geometry: merged,
+    meta: tieRep ? mkMeta('拉筋', tieRep.pts, tieRep.dia, tieRep.grade) : { label: '拉筋', length: 0 },
+    kind: 'tie',
+  }];
 }
 
 /** 端支座 / 中间支座负筋 (上部，与贯通筋并排, 超出单排最大根数时分两排) */
@@ -485,10 +498,10 @@ export function buildTopSupport(p: BeamParams, d: Derived): RebarBuilt[] {
       const pts = side === 'L'
         ? [new THREE.Vector3(xOuter, yDown, z), new THREE.Vector3(xOuter, yRow, z), new THREE.Vector3(xEnd, yRow, z)]
         : [new THREE.Vector3(xEnd, yRow, z), new THREE.Vector3(xOuter, yRow, z), new THREE.Vector3(xOuter, yDown, z)];
-      out.push({ geometry: tubeFromPolyline(pts, dia / 2), meta: { label, length: 0 }, kind });
+      out.push({ geometry: tubeFromPolyline(pts, dia / 2), meta: mkMeta(label, pts, dia, _bundle.grade), kind });
     } else {
       const pts = [new THREE.Vector3(xStartIfMiddle!, yRow, z), new THREE.Vector3(xEnd, yRow, z)];
-      out.push({ geometry: tubeFromPolyline(pts, dia / 2), meta: { label, length: 0 }, kind });
+      out.push({ geometry: tubeFromPolyline(pts, dia / 2), meta: mkMeta(label, pts, dia, _bundle.grade), kind });
     }
   };
 

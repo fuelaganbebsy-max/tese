@@ -7,6 +7,7 @@ import { useMemberStore } from '../store/memberStore';
 import { derive } from '../domain/kl/derive';
 import { splitSupportRows } from '../geometry/buildLongitudinal';
 import { getMemberEntry } from '../memberRegistry';
+import { RebarCutView } from './RebarCutView';
 
 function SectionCutButton() {
   const show = useBeamStore((s) => s.view.showSectionCut);
@@ -217,6 +218,7 @@ function ColumnQuantitiesTable() {
   const params = useColumnStore((s) => s.params);
   const d = useMemo(() => deriveColumn(params), [params]);
   const rows = useMemo(() => buildColumnRows(params, d), [params, d]);
+  const [tab, setTab] = useState<'bom' | 'cut'>('bom');
 
   const totalSteel = rows.reduce((s, r) => {
     const wPerM = 0.00617 * r.dia * r.dia;
@@ -243,14 +245,24 @@ function ColumnQuantitiesTable() {
   return (
     <div className="flex-1 rounded-xl bg-surface-container/80 backdrop-blur-[20px] border border-white/5 flex flex-col overflow-hidden">
       <div className="px-4 py-2 border-b border-white/5 bg-surface-container-highest/30 flex justify-between items-center shrink-0">
-        <h3 className="font-body-md text-body-md font-medium text-on-surface flex items-center gap-2 font-bold">
-          <span className="material-symbols-outlined text-[16px] text-primary-fixed-dim">table_chart</span>
-          钢筋工程量 <span className="text-on-surface-variant text-[11px] font-normal ml-1">(BOM Data)</span>
-        </h3>
-        <button onClick={exportCsv} className="text-primary-fixed-dim text-[11px] hover:underline font-label-numeric text-label-numeric font-mono active:scale-95 transition-transform">
-          导出 CSV
-        </button>
+        <SlideToggle
+          value={tab}
+          onChange={setTab}
+          options={[
+            { value: 'bom', label: '钢筋工程量' },
+            { value: 'cut', label: '下料简图' },
+          ]}
+        />
+        {tab === 'bom' && (
+          <button onClick={exportCsv} className="text-primary-fixed-dim text-[11px] hover:underline font-label-numeric text-label-numeric font-mono active:scale-95 transition-transform">
+            导出 CSV
+          </button>
+        )}
       </div>
+      {tab === 'cut' ? (
+        <RebarCutView />
+      ) : (
+      <>
       <div className="flex-1 overflow-auto">
         <table className="w-full text-left border-collapse">
           <thead className="sticky top-0 bg-surface-container-high/90 backdrop-blur-md z-10 border-b border-white/10">
@@ -289,6 +301,8 @@ function ColumnQuantitiesTable() {
         <span className="text-[11px] text-on-surface-variant">总钢筋估重</span>
         <span className="font-label-numeric text-label-numeric text-primary-fixed-dim font-mono font-bold">{totalSteel.toFixed(2)} kg</span>
       </div>
+      </>
+      )}
     </div>
   );
 }
@@ -847,7 +861,7 @@ function QuantitiesTable() {
   const params = useBeamStore((s) => s.params);
   const d = useMemo(() => derive(params), [params]);
   const rows = useMemo(() => buildRows(params, d), [params, d]);
-  const [tab, setTab] = useState<'mechanics' | 'bom'>('bom');
+  const [tab, setTab] = useState<'mechanics' | 'bom' | 'cut'>('bom');
   const [expanded, setExpanded] = useState(false);
   const [size, setSize] = useState({ w: 560, h: 420 });
   const [anchor, setAnchor] = useState({ left: 16, bottom: 16 });
@@ -922,6 +936,7 @@ function QuantitiesTable() {
           options={[
             { value: 'mechanics', label: '力学模型' },
             { value: 'bom', label: '钢筋工程量' },
+            { value: 'cut', label: '下料简图' },
           ]}
         />
         {tab === 'bom' && (
@@ -932,6 +947,8 @@ function QuantitiesTable() {
       </div>
       {tab === 'mechanics' ? (
         <BeamMechanicsView />
+      ) : tab === 'cut' ? (
+        <RebarCutView />
       ) : (
         <>
           <div className="flex-1 overflow-auto">

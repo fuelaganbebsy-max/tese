@@ -20,7 +20,7 @@ interface MockUser {
 }
 
 const SCHOOLS: MockSchool[] = [
-  { id: 'a-college', name: 'A学院', isActive: true },
+  { id: 'a-college', name: '常州工程职业技术学院', isActive: true },
 ];
 
 const ALLOWED_USERS: MockUser[] = [

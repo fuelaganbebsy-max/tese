@@ -1,13 +1,19 @@
 import { Canvas, useThree } from '@react-three/fiber';
+import type { ThreeEvent } from '@react-three/fiber';
 import { OrbitControls, GizmoHelper, GizmoViewport, Grid, Environment } from '@react-three/drei';
 import { useMemo, useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { deriveColumn } from '../domain/kz/derive';
 import type { ColumnParams } from '../domain/kz/types';
 import { useColumnStore } from '../store/columnStore';
+import { useSelectionStore } from '../store/selectionStore';
 import { buildFreecadStirrupGeometry } from '../geometry/freecadStirrup';
 import { tubeFromPolyline } from '../geometry/rebarPath';
 import { stirrupHookStraight } from '../domain/codes/22G101';
+import { straightBarCutShape, stirrupCutShape, cutShapeFromPolyline } from '../domain/rebarShape';
+
+const BAR_LABELS = { corner: '角筋', bMid: 'b边中部筋', hMid: 'h边中部筋' } as const;
+const HIGHLIGHT_COLOR = '#ffffff';
 
 /** 柱子超出梁外侧的长度 (mm) — 下侧超出梁底面，上侧超出梁顶面 */
 const COLUMN_EXTEND = 500;
@@ -57,23 +63,78 @@ function ColumnConcrete({ params, show }: { params: ColumnParams; show: boolean 
   );
 }
 
+// ─── 可点选纵筋 ──────────────────────────────────────────
+function ColPickableBar({
+  geo, color, barKey, length, grade, diameter, label,
+}: { geo: THREE.BufferGeometry; color: string; barKey: string; length: number; grade: string; diameter: number; label: string }) {
+  const selectedKey = useSelectionStore((s) => s.selectedKey);
+  const active = selectedKey === barKey;
+  const handleClick = (e: ThreeEvent<MouseEvent>) => {
+    e.stopPropagation();
+    // 竖向两点折线 → 下料图中保持柱纵筋的竖直方向
+    const shape = cutShapeFromPolyline(
+      [{ x: 0, y: 0, z: 0 }, { x: 0, y: length, z: 0 }],
+      { mark: label, grade, diameter, note: '按柱净高，未计入搭接/连接' },
+    );
+    useSelectionStore.getState().select(shape, barKey);
+  };
+  return (
+    <mesh
+      geometry={geo}
+      renderOrder={active ? 2 : 1}
+      onClick={handleClick}
+      onPointerOver={(e) => { e.stopPropagation(); document.body.style.cursor = 'pointer'; }}
+      onPointerOut={() => { document.body.style.cursor = 'auto'; }}
+    >
+      <meshStandardMaterial
+        color={active ? HIGHLIGHT_COLOR : color}
+        emissive={active ? HIGHLIGHT_COLOR : '#000000'}
+        emissiveIntensity={active ? 0.5 : 0}
+        metalness={0.7}
+        roughness={0.35}
+        envMapIntensity={1.2}
+      />
+    </mesh>
+  );
+}
+
 // ─── 纵筋（全长） ─────────────────────────────────────────
 function ColumnLongBars({ params, derived, show }: { params: ColumnParams; derived: ReturnType<typeof deriveColumn>; show: boolean }) {
+  const totalL = colTotalH(params.Hn);
   const bars = useMemo(() => {
-    const totalL = colTotalH(params.Hn);
     const cy = colCenterY(params.Hn);
     return derived.barPositions.map((pos, i) => {
       const r = pos.bundle.diameter / 2;
       const geo = new THREE.CylinderGeometry(r, r, totalL, 8);
       geo.translate(pos.x, cy, pos.y);
-      return <mesh key={i} geometry={geo}>
-        <meshStandardMaterial color={BAR_COLORS[pos.kind]} metalness={0.7} roughness={0.35} envMapIntensity={1.2} />
-      </mesh>;
+      return {
+        geo,
+        color: BAR_COLORS[pos.kind],
+        key: `col-bar-${i}`,
+        grade: pos.bundle.grade as string,
+        dia: pos.bundle.diameter,
+        label: `柱${BAR_LABELS[pos.kind]} #${i + 1}`,
+      };
     });
-  }, [derived.barPositions, params.Hn]);
+  }, [derived.barPositions, params.Hn, totalL]);
 
   if (!show) return null;
-  return <>{bars}</>;
+  return (
+    <>
+      {bars.map((b) => (
+        <ColPickableBar
+          key={b.key}
+          geo={b.geo}
+          color={b.color}
+          barKey={b.key}
+          length={params.Hn}
+          grade={b.grade}
+          diameter={b.dia}
+          label={b.label}
+        />
+      ))}
+    </>
+  );
 }
 
 // ─── 箍筋 (FreeCAD-Reinforcement getpointsOfStirrup 做法) ─────────
@@ -165,7 +226,7 @@ function derivedTieLegs(params: ColumnParams) {
   return lines;
 }
 
-function ColumnStirrupInstances({ geometry, ys, color }: { geometry: THREE.BufferGeometry | null; ys: number[]; color: string }) {
+function ColumnStirrupInstances({ geometry, ys, color, onPick, active }: { geometry: THREE.BufferGeometry | null; ys: number[]; color: string; onPick?: () => void; active?: boolean }) {
   const ref = useRef<THREE.InstancedMesh>(null);
 
   useEffect(() => {
@@ -183,8 +244,21 @@ function ColumnStirrupInstances({ geometry, ys, color }: { geometry: THREE.Buffe
 
   if (!geometry || ys.length === 0) return null;
   return (
-    <instancedMesh ref={ref} args={[geometry, undefined, ys.length]}>
-      <meshStandardMaterial color={color} metalness={0.65} roughness={0.4} envMapIntensity={1.0} />
+    <instancedMesh
+      ref={ref}
+      args={[geometry, undefined, ys.length]}
+      onClick={(e) => { e.stopPropagation(); onPick?.(); }}
+      onPointerOver={(e) => { e.stopPropagation(); document.body.style.cursor = 'pointer'; }}
+      onPointerOut={() => { document.body.style.cursor = 'auto'; }}
+    >
+      <meshStandardMaterial
+        color={active ? HIGHLIGHT_COLOR : color}
+        emissive={active ? HIGHLIGHT_COLOR : '#000000'}
+        emissiveIntensity={active ? 0.35 : 0}
+        metalness={0.65}
+        roughness={0.4}
+        envMapIntensity={1.0}
+      />
     </instancedMesh>
   );
 }
@@ -235,12 +309,38 @@ function ColumnStirrups({ params, derived, show }: { params: ColumnParams; deriv
     [params.Hn, params.stirrup.spacingDense, derived.denseStirrupYs, derived.sparseStirrupYs],
   );
 
+  const selectedKey = useSelectionStore((s) => s.selectedKey);
+  const pickStirrup = () => {
+    if (params.sectionType === 'circle') {
+      const ds = params.stirrup.diameter;
+      const perimeter = Math.PI * (params.D - 2 * params.cover - ds);
+      useSelectionStore.getState().select(
+        straightBarCutShape(Math.round(perimeter + 2 * stirrupHookStraight(ds)), {
+          mark: '柱圆箍筋', grade: params.stirrup.grade, diameter: ds, note: '圆形箍筋展开长度',
+        }),
+        'col-stirrup',
+      );
+      return;
+    }
+    const ds = params.stirrup.diameter;
+    const width = params.b - 2 * params.cover - ds;
+    const height = params.h - 2 * params.cover - ds;
+    const legsX = Math.max(2, Math.round(params.stirrup.legsX ?? 2));
+    const legsY = Math.max(2, Math.round(params.stirrup.legsY ?? 2));
+    const shape = stirrupCutShape(width, height, stirrupHookStraight(ds), {
+      mark: '柱外箍筋', grade: params.stirrup.grade, diameter: ds,
+      note: `肢数 ${legsX}×${legsY}（内部拉筋另计）`,
+    });
+    useSelectionStore.getState().select(shape, 'col-stirrup');
+  };
+  const stirrupActive = selectedKey === 'col-stirrup';
+
   if (!show || !unitGeo) return null;
 
   return (
     <>
-      <ColumnStirrupInstances geometry={unitGeo} ys={sparse} color="#78909c" />
-      <ColumnStirrupInstances geometry={unitGeo} ys={dense} color="#26c6da" />
+      <ColumnStirrupInstances geometry={unitGeo} ys={sparse} color="#78909c" onPick={pickStirrup} active={stirrupActive} />
+      <ColumnStirrupInstances geometry={unitGeo} ys={dense} color="#26c6da" onPick={pickStirrup} active={stirrupActive} />
     </>
   );
 }
@@ -357,6 +457,11 @@ export function ColumnScene() {
   const view = useColumnStore((s) => s.view);
   const derived = useMemo(() => deriveColumn(params), [params]);
 
+  // 参数/构件变化时清除选中，避免陈旧下料标注
+  useEffect(() => {
+    useSelectionStore.getState().clear();
+  }, [params]);
+
   const totalH = colTotalH(params.Hn);
   const cy = colCenterY(params.Hn);
   const camDist = Math.max(totalH * 1.5, 4000);
@@ -367,6 +472,7 @@ export function ColumnScene() {
       camera={{ position: [camDist * 0.5, cy * 1.1, camDist * 0.5], fov: 35, near: 1, far: camDist * 5 }}
       gl={{ antialias: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.2 }}
       className="w-full h-full"
+      onPointerMissed={() => useSelectionStore.getState().clear()}
     >
       <color attach="background" args={["#121212"]} />
       <ambientLight intensity={0.3} />

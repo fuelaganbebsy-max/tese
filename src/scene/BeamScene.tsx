@@ -3,6 +3,7 @@ import { OrbitControls, GizmoHelper, GizmoViewport, Grid, Environment } from '@r
 import { useMemo, useEffect } from 'react';
 import * as THREE from 'three';
 import { useBeamStore } from '../store/beamStore';
+import { useSelectionStore } from '../store/selectionStore';
 import { derive } from '../domain/kl/derive';
 import { Concrete } from './Concrete';
 import { Rebars } from './Rebars';
@@ -46,6 +47,11 @@ export function BeamScene() {
   const params = useBeamStore((s) => s.params);
   const d = useMemo(() => derive(params), [params]);
 
+  // 参数/构件变化时清除选中，避免陈旧下料标注
+  useEffect(() => {
+    useSelectionStore.getState().clear();
+  }, [params]);
+
   // 相机距离根据梁全长
   const camDist = Math.max(d.totalLength * 1.1, 4000);
   const center: [number, number, number] = [d.totalLength / 2, params.h / 2, 0];
@@ -55,6 +61,7 @@ export function BeamScene() {
       shadows={false}
       camera={{ position: [d.totalLength * 0.6, params.h * 4, camDist * 0.6], fov: 35, near: 10, far: camDist * 10 }}
       gl={{ antialias: true, logarithmicDepthBuffer: true }}
+      onPointerMissed={() => useSelectionStore.getState().clear()}
     >
       <color attach="background" args={["#121212"]} />
       <ambientLight intensity={0.3} />
