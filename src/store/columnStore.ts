@@ -83,7 +83,7 @@ export const useColumnStore = create<ColumnStore>()(persist(
   }),
   {
     name: 'rebar-3d-column',
-    version: 1,
+    version: 2,
     partialize: (state) => ({ params: state.params, view: state.view }),
     migrate: (persisted: any) => {
       try {

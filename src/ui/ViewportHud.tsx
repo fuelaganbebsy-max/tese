@@ -105,15 +105,24 @@ export function ViewportHud() {
         </div>
       )}
       {!isBeam && view.showSectionCut && (
-        <div className="absolute top-1/2 -translate-y-1/2 left-3 pointer-events-auto z-10 flex flex-col items-center gap-1">
+        <div className="absolute top-1/2 -translate-y-1/2 right-3 pointer-events-auto z-10 flex flex-col items-center gap-1">
           <span className="text-[8px] text-primary-fixed-dim/60 font-mono leading-none">▴</span>
           <input
             type="range"
             min={0} max={100} step={1}
             value={Math.round((view.sectionCutY ?? 0.5) * 100)}
             onChange={(e) => setView({ sectionCutY: Number(e.target.value) / 100 })}
-            className="h-40 w-1.5"
-            style={{ writingMode: 'vertical-lr', direction: 'rtl', accentColor: '#00daf3' }}
+            className="w-4"
+            style={{
+              writingMode: 'vertical-lr',
+              direction: 'rtl',
+              accentColor: '#00daf3',
+              height: '160px',
+              appearance: 'auto',
+              WebkitAppearance: 'slider-vertical',
+              background: 'transparent',
+              padding: 0,
+            }}
           />
           <span className="text-[8px] text-primary-fixed-dim/60 font-mono leading-none">▾</span>
           <span className="text-[9px] text-primary-fixed-dim font-mono mt-0.5">{Math.round((view.sectionCutY ?? 0.5) * 100)}%</span>

@@ -27,8 +27,8 @@ const BEAM_PROJECTION = 800;
 
 /** 柱底 Y 坐标 */
 const COL_BOTTOM = -COLUMN_EXTEND;
-/** 柱顶 Y 坐标 = floors*Hn + 梁高（柱顶到屋面即止，无伸出） */
-const colTop = (Hn: number, floors: number) => floors * Hn + BEAM_HEIGHT;
+/** 柱顶 Y 坐标 = floors*层高 + 梁高（柱顶到屋面即止） */
+const colTop = (Hn: number, floors: number) => floors * (Hn + BEAM_HEIGHT) + BEAM_HEIGHT;
 /** 柱总高 */
 const colTotalH = (Hn: number, floors: number) => colTop(Hn, floors) - COL_BOTTOM;
 /** 柱几何中心 Y */
@@ -62,14 +62,15 @@ function ColumnConcrete({ params, show }: { params: ColumnParams; show: boolean 
 
 /** 柱竖向布局（与场景中绘制的梁/柱伸出段一致） */
 function columnLayout(Hn: number, floors: number): ColumnLayout {
+  const storyH = Hn + BEAM_HEIGHT;
   return {
     botY: COL_BOTTOM,
     floorY: 0,
-    topBeamBottomY: floors * Hn,
-    topBeamTopY: floors * Hn + BEAM_HEIGHT,
-    topY: floors * Hn + BEAM_HEIGHT,
+    topBeamBottomY: floors * storyH,
+    topBeamTopY: floors * storyH + BEAM_HEIGHT,
+    topY: floors * storyH + BEAM_HEIGHT,
     floorCount: floors,
-    floorHeight: Hn,
+    floorHeight: storyH,
   };
 }
 
@@ -152,7 +153,7 @@ function ColumnLongBars({ params, derived, show }: { params: ColumnParams; deriv
 // ─── 箍筋 (FreeCAD-Reinforcement getpointsOfStirrup 做法) ─────────
 /**
  * 外箍筋 + 内部拉筋 (单肢箍)，几何位于 xy 平面 (z=法向螺旋偏移)，中心在原点。
- * 外箍筋采用 FreeCAD 算法 (135° 弯钩 + 圆角 + 法向偏移)；内肢以带 135° 弯钩的拉筋表示。
+ * 外箍筋采用 FreeCAD 算法 (135° 弯钩 + 圆角 + 法向偏移)；内肢以独立的矩形箍筋在 ColumnStirrups 中生成。
  */
 function buildRectLineGeometry(params: ColumnParams) {
   const c = params.cover + params.stirrup.diameter / 2;
@@ -161,26 +162,15 @@ function buildRectLineGeometry(params: ColumnParams) {
   const d = params.stirrup.diameter;
   const bentFactor = stirrupHookStraight(d) / d;
 
-  const geos: THREE.BufferGeometry[] = [];
-
   // 外箍筋 (中心线尺寸 = 2·half)
-  geos.push(
-    buildFreecadStirrupGeometry({
-      width: halfW * 2,
-      height: halfH * 2,
-      diameter: d,
-      bentAngle: 135,
-      bentFactor,
-      rounding: 2,
-    }),
-  );
-
-  // 内部拉筋
-  for (const tie of derivedTieLegs(params)) {
-    geos.push(buildTieLeg(tie, d, bentFactor));
-  }
-
-  return mergeGeometries(geos);
+  return buildFreecadStirrupGeometry({
+    width: halfW * 2,
+    height: halfH * 2,
+    diameter: d,
+    bentAngle: 135,
+    bentFactor,
+    rounding: 2,
+  });
 }
 
 /** 单根拉筋 (两端 135° 弯钩) 几何，位于 xy 平面 (z=0) */
@@ -238,21 +228,27 @@ function derivedTieLegs(params: ColumnParams) {
   return lines;
 }
 
-function ColumnStirrupInstances({ geometry, ys, color, onPick, active }: { geometry: THREE.BufferGeometry | null; ys: number[]; color: string; onPick?: () => void; active?: boolean }) {
+function ColumnStirrupInstances({ geometry, ys, color, onPick, active, rotateCorners, yOffset = 0 }: { geometry: THREE.BufferGeometry | null; ys: number[]; color: string; onPick?: () => void; active?: boolean; rotateCorners?: boolean; yOffset?: number }) {
   const ref = useRef<THREE.InstancedMesh>(null);
 
   useEffect(() => {
     if (!ref.current) return;
     const dummy = new THREE.Object3D();
     ys.forEach((y, i) => {
-      // ys are already world Y coordinates
-      dummy.position.set(0, y, 0);
-      dummy.rotation.set(Math.PI / 2, 0, 0);
+      dummy.position.set(0, y + yOffset, 0);
+      if (rotateCorners) {
+        // 基于 Y 坐标取整，使同 Y 的所有箍筋（外+内）旋转角度一致
+        const cornerIdx = Math.round((y - COL_BOTTOM) / 100) % 4;
+        const rotZ = (cornerIdx * Math.PI) / 2;
+        dummy.rotation.set(Math.PI / 2, 0, rotZ);
+      } else {
+        dummy.rotation.set(Math.PI / 2, 0, 0);
+      }
       dummy.updateMatrix();
       ref.current!.setMatrixAt(i, dummy.matrix);
     });
     ref.current.instanceMatrix.needsUpdate = true;
-  }, [ys]);
+  }, [ys, rotateCorners, yOffset]);
 
   if (!geometry || ys.length === 0) return null;
   return (
@@ -275,32 +271,78 @@ function ColumnStirrupInstances({ geometry, ys, color, onPick, active }: { geome
   );
 }
 
-/** 计算沿柱全长（含伸出段）的箍筋 Y 坐标 */
+/** 计算沿柱全长（含伸出段/各楼层）的箍筋 Y 坐标 */
 function computeFullStirrupYs(params: ColumnParams, derived: ReturnType<typeof deriveColumn>) {
   const floors = params.floors ?? 1;
-  const { spacingDense } = params.stirrup;
+  const netHn = params.Hn;          // 柱净高（= floorHeight - beamHeight）
+  const hc = Math.max(params.b, params.h);
+  const bh = BEAM_HEIGHT;           // 梁高（核心区高度）
+  const storyH = netHn + bh;        // 层高 = 柱净高 + 梁高
+  const { spacingDense, spacingSparse } = params.stirrup;
   const bottom = COL_BOTTOM;
-  const top = colTop(params.Hn, floors);
+
+  const dense: number[] = [];   // 柱加密区
+  const sparse: number[] = [];  // 柱非加密区
+  const core: number[] = [];    // 梁柱核心区（梁高范围）
 
   // 柱底伸出段（底部 → y=0）
-  const extraBelow: number[] = [];
   let y = bottom + spacingDense / 2;
   while (y < 0) {
-    extraBelow.push(y);
+    dense.push(y);
     y += spacingDense;
   }
 
-  // 柱顶伸出段（y=楼层顶 → 柱顶）
-  const extraAbove: number[] = [];
-  y = floors * params.Hn + spacingDense;
+  // 各楼层
+  for (let f = 0; f < floors; f++) {
+    const floorBot = f * storyH;        // 楼面标高（梁底）
+    const coreTop = floorBot + bh;      // 梁顶 = 核心区顶
+    const segTop = (f + 1) * storyH;    // 本层柱段顶（上层梁底）
+
+    // 核心区（梁高范围）：梁柱节点
+    y = floorBot + spacingDense / 2;
+    while (y < coreTop) {
+      core.push(y);
+      y += spacingDense;
+    }
+
+    // 柱加密区：max(净高/6, hc, 500)
+    const denseLen = Math.max(Math.ceil(netHn / 6), hc, 500);
+
+    // 底部加密区（梁顶以上）
+    y = coreTop + spacingDense / 2;
+    while (y < coreTop + denseLen) {
+      dense.push(y);
+      y += spacingDense;
+    }
+
+    // 中部非加密区
+    const topStart = segTop - denseLen;
+    y = coreTop + denseLen + spacingSparse / 2;
+    while (y < topStart) {
+      sparse.push(y);
+      y += spacingSparse;
+    }
+
+    // 顶部加密区（上层梁底以下）
+    y = topStart;
+    while (y < segTop) {
+      dense.push(y);
+      y += spacingDense;
+    }
+  }
+
+  // 顶层核心区（屋面梁范围）
+  y = floors * storyH + spacingDense / 2;
+  const top = floors * storyH + bh;     // = colTop
   while (y < top) {
-    extraAbove.push(y);
+    core.push(y);
     y += spacingDense;
   }
 
   return {
-    dense: [...extraBelow, ...derived.denseStirrupYs, ...extraAbove],
-    sparse: derived.sparseStirrupYs,
+    dense: dense.sort((a, b) => a - b),
+    sparse: sparse.sort((a, b) => a - b),
+    core: core.sort((a, b) => a - b),
   };
 }
 
@@ -310,9 +352,37 @@ function ColumnStirrups({ params, derived, show }: { params: ColumnParams; deriv
     return buildRectLineGeometry(params);
   }, [params.b, params.h, params.cover, params.stirrup.diameter, params.stirrup.legs, params.stirrup.legsX, params.stirrup.legsY]);
 
-  const { dense, sparse } = useMemo(
+  // 内箍筋（矩形箍）几何
+  const innerData = useMemo(() => {
+    const result: { geo: THREE.BufferGeometry; w: number; h: number; kind: string }[] = [];
+    const d = params.stirrup.diameter;
+    const bentFactor = stirrupHookStraight(d) / d;
+    const addInnerRect = (bars: typeof derived.barPositions, kind: string) => {
+      if (bars.length < 4) return;
+      const minX = Math.min(...bars.map((p) => p.x));
+      const maxX = Math.max(...bars.map((p) => p.x));
+      const minY = Math.min(...bars.map((p) => p.y));
+      const maxY = Math.max(...bars.map((p) => p.y));
+      const barR = Math.max(...bars.map((p) => p.bundle.diameter)) / 2;
+      const gap = 1;
+      const w = maxX - minX + 2 * barR + 2 * gap;
+      const h = maxY - minY + 2 * barR + 2 * gap;
+      if (w < 10 || h < 10) return;
+      result.push({
+        geo: buildFreecadStirrupGeometry({ width: w, height: h, diameter: d, bentAngle: 135, bentFactor, rounding: 2 }),
+        w,
+        h,
+        kind,
+      });
+    };
+    addInnerRect(derived.barPositions.filter((p) => p.kind === 'bMid'), 'bMid');
+    addInnerRect(derived.barPositions.filter((p) => p.kind === 'hMid'), 'hMid');
+    return result;
+  }, [params, derived]);
+
+  const { dense, sparse, core } = useMemo(
     () => computeFullStirrupYs(params, derived),
-    [params.Hn, params.floors, params.stirrup.spacingDense, derived.denseStirrupYs, derived.sparseStirrupYs],
+    [params.Hn, params.floors, params.b, params.h, params.stirrup.spacingDense, params.stirrup.spacingSparse],
   );
 
   const selectedKey = useSelectionStore((s) => s.selectedKey);
@@ -330,12 +400,36 @@ function ColumnStirrups({ params, derived, show }: { params: ColumnParams; deriv
   };
   const stirrupActive = selectedKey === 'col-stirrup';
 
+  // 内箍筋点击：使用各自几何尺寸生成下料图
+  const pickInner = (kind: string, w: number, h: number) => {
+    const ds = params.stirrup.diameter;
+    const shape = stirrupCutShape(w, h, stirrupHookStraight(ds), {
+      mark: kind === 'bMid' ? '柱内箍筋(b向)' : '柱内箍筋(h向)',
+      grade: params.stirrup.grade,
+      diameter: ds,
+      note: kind === 'bMid' ? '包b边中部筋' : '包h边中部筋',
+    });
+    useSelectionStore.getState().select(shape, `col-stirrup-${kind}`);
+  };
+
   if (!show || !unitGeo) return null;
 
   return (
     <>
+      <ColumnStirrupInstances geometry={unitGeo} ys={core} color="#26c6da" onPick={pickStirrup} active={stirrupActive} />
       <ColumnStirrupInstances geometry={unitGeo} ys={sparse} color="#78909c" onPick={pickStirrup} active={stirrupActive} />
-      <ColumnStirrupInstances geometry={unitGeo} ys={dense} color="#26c6da" onPick={pickStirrup} active={stirrupActive} />
+      <ColumnStirrupInstances geometry={unitGeo} ys={dense} color="#4dd0e1" onPick={pickStirrup} active={stirrupActive} rotateCorners />
+      {innerData.map((item, i) => (
+        <ColumnStirrupInstances
+          key={i}
+          geometry={item.geo}
+          ys={[...dense, ...sparse, ...core]}
+          color="#78909c"
+          rotateCorners
+          onPick={() => pickInner(item.kind, item.w, item.h)}
+          active={selectedKey === `col-stirrup-${item.kind}`}
+        />
+      ))}
     </>
   );
 }
@@ -356,7 +450,7 @@ function ColumnBeams({ params }: { params: ColumnParams }) {
     }
 
     for (let f = 0; f <= floors; f++) {
-      const floorY = f * params.Hn;
+      const floorY = f * (params.Hn + BEAM_HEIGHT);
       const centerY = floorY + BEAM_HEIGHT / 2;
 
       addBeam(-colHalfB - beamLen / 2, centerY, 0, beamLen, BEAM_HEIGHT, BEAM_WIDTH, '#8a9a6e');

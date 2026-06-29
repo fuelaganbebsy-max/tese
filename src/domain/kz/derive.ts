@@ -284,7 +284,7 @@ export function defaultColumn(): ColumnParams {
     h: 600,
     Hn: 3600,
     beamHeight: 600,
-    floorHeight: 3600,
+    floorHeight: 4200,
     cover: 25,
     concrete: 'C30',
     seismic: 2,
@@ -307,7 +307,7 @@ export function defaultColumn(): ColumnParams {
     connectionType: 'tie',
     lapRatio: 50,
     position: 'middle',
-    baseType: 'foundation',
+    baseType: 'floor',
     floors: 2,
   };
 }

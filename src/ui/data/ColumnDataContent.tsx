@@ -47,7 +47,17 @@ function ColumnSectionView() {
   const derived = useMemo(() => deriveColumn(params), [params]);
   const [expanded, setExpanded] = useState(false);
   const [size, setSize] = useState({ w: 400, h: 360 });
+  const [anchor, setAnchor] = useState({ right: 16, bottom: 16 });
+  const [zoom, setZoom] = useState(1);
+  const panelRef = useRef<HTMLDivElement>(null);
   const startRef = useRef({ x: 0, y: 0, w: 0, h: 0 });
+  const toggleExpand = useCallback(() => {
+    if (!expanded) {
+      const r = panelRef.current?.getBoundingClientRect();
+      if (r) setAnchor({ right: window.innerWidth - r.right, bottom: window.innerHeight - r.bottom });
+    }
+    setExpanded((v) => !v);
+  }, [expanded]);
   const onResizeStart = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     startRef.current = { x: e.clientX, y: e.clientY, w: size.w, h: size.h };
@@ -64,15 +74,35 @@ function ColumnSectionView() {
   const scale = (W - innerPad * 2) / dim;
   const toSvgX = (x: number) => innerPad + (x + params.b / 2) * scale;
   const toSvgY = (y: number) => innerPad + (params.h / 2 - y) * scale;
+
+  // 箍筋外框 — 按角筋外边界包裹，确保箍筋包住4个角筋
+  const barPosXs = derived.barPositions.map((p) => toSvgX(p.x));
+  const barPosYs = derived.barPositions.map((p) => toSvgY(p.y));
+  const maxBarDia = Math.max(...derived.barPositions.map((p) => p.bundle.diameter)) * scale;
+  const barR = Math.max(maxBarDia / 2, 3);
+  const gap = 2; // 箍筋内缘与纵筋外缘的间隙 (px)
+  const sx0 = Math.min(...barPosXs) - barR - gap;
+  const sy0 = Math.min(...barPosYs) - barR - gap;
+  const sx1 = Math.max(...barPosXs) + barR + gap;
+  const sy1 = Math.max(...barPosYs) + barR + gap;
+
+  // 左上角角筋（用于弯钩定位）
   const cornerBars = derived.barPositions.filter((pos) => pos.kind === 'corner');
   const topLeftBar = cornerBars.reduce((best, pos) => (
     !best || pos.x < best.x || (pos.x === best.x && pos.y > best.y) ? pos : best
   ), undefined as (typeof cornerBars)[number] | undefined);
 
+  // 135° 弯钩参数 (skill: 5d 示意)
+  const hookLen = 5 * params.stirrup.diameter * scale;
+  const hd = hookLen * Math.SQRT1_2;
+
   return (
+    <>
+      {expanded && <div className="w-1/3" aria-hidden />}
     <div
+      ref={panelRef}
       className={expanded ? 'rounded-xl flex flex-col overflow-hidden shadow-2xl' : 'w-1/3 rounded-xl bg-surface-container/80 backdrop-blur-[20px] border border-white/5 flex flex-col overflow-hidden'}
-      style={expanded ? { position: 'fixed', bottom: 16, right: 16, width: size.w, height: size.h, zIndex: 9999, background: 'rgba(13,13,13,0.97)', border: '1px solid rgba(0,218,243,0.25)', boxShadow: '0 8px 48px rgba(0,0,0,0.8)' } : {}}
+      style={expanded ? { position: 'fixed', bottom: anchor.bottom, right: anchor.right, width: size.w, height: size.h, zIndex: 9999, background: 'rgba(13,13,13,0.97)', border: '1px solid rgba(0,218,243,0.25)', boxShadow: '0 8px 48px rgba(0,0,0,0.8)' } : {}}
     >
       {expanded && (
         <div
@@ -84,29 +114,33 @@ function ColumnSectionView() {
       <div
         className="px-4 py-2 border-b border-white/5 bg-surface-container-highest/30 flex justify-between items-center shrink-0 select-none"
         style={{ cursor: 'pointer' }}
-        onDoubleClick={() => setExpanded(v => !v)}
+        onDoubleClick={toggleExpand}
         title={expanded ? '双击还原' : '双击放大'}
       >
         <h3 className="font-body-md text-body-md font-medium text-on-surface font-bold">
           剖切面 <span className="text-on-surface-variant text-[11px] ml-1">(Section A-A)</span>
         </h3>
-        <div className="flex items-center gap-2">
-          <SectionCutToggle />
-          <span className="px-2 py-1 rounded bg-surface-container-highest border border-white/5 text-[10px] text-on-surface-variant font-mono">
-            剖面
-          </span>
-        </div>
+        <SectionCutToggle />
       </div>
-      <div className="flex-1 p-4 flex items-center justify-center relative bg-surface-container-lowest">
+      <div className="flex-1 p-4 flex items-center justify-center relative bg-surface-container-lowest overflow-hidden"
+        onWheel={(e) => {
+          if (!expanded) {
+            e.preventDefault();
+            setZoom((z) => Math.max(0.5, Math.min(5, z - e.deltaY * 0.002)));
+          }
+        }}
+        style={{ cursor: zoom !== 1 && !expanded ? 'grab' : 'default' }}
+      >
+        <div style={{ transform: `scale(${zoom})`, transformOrigin: 'center center', transition: 'transform 0.05s' }}>
         <svg width={expanded ? size.w - 32 : W} height={expanded ? size.h - 72 : H} viewBox={`0 0 ${W} ${H}`}>
-          <rect x={innerPad} y={innerPad} width={W - innerPad * 2} height={H - innerPad * 2} fill="none" stroke="rgba(59,73,76,0.5)" strokeWidth={2} />
-          {/* grid lines */}
-          {[0.25, 0.5, 0.75].map((f) => (
-            <line key={`h${f}`} x1={innerPad} y1={innerPad + f * (H - innerPad * 2)} x2={W - innerPad} y2={innerPad + f * (H - innerPad * 2)} stroke="rgba(59,73,76,0.3)" strokeWidth={0.5} />
-          ))}
-          {[0.25, 0.5, 0.75].map((f) => (
-            <line key={`v${f}`} x1={innerPad + f * (W - innerPad * 2)} y1={innerPad} x2={innerPad + f * (W - innerPad * 2)} y2={H - innerPad} stroke="rgba(59,73,76,0.3)" strokeWidth={0.5} />
-          ))}
+          <defs>
+            <filter id="col-glow">
+              <feGaussianBlur stdDeviation="1.5" result="blur" />
+              <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+            </filter>
+          </defs>
+          {/* 混凝土截面轮廓 */}
+          <rect x={innerPad} y={innerPad} width={W - innerPad * 2} height={H - innerPad * 2} fill="rgba(59,73,76,0.1)" stroke="rgba(59,73,76,0.6)" strokeWidth={2} />
           {/* 轴线参考十字 */}
           <line x1={innerPad} y1={H/2} x2={W - innerPad} y2={H/2} stroke="#4dd0e1" strokeWidth={1} strokeDasharray="5,4" opacity={0.7} />
           <line x1={W/2} y1={innerPad} x2={W/2} y2={H - innerPad} stroke="#4dd0e1" strokeWidth={1} strokeDasharray="5,4" opacity={0.7} />
@@ -114,78 +148,69 @@ function ColumnSectionView() {
           <text x={innerPad + 8} y={H/2 + 1.5} textAnchor="middle" dominantBaseline="central" fill="#4dd0e1" fontSize={7} opacity={0.8} fontFamily="sans-serif">①</text>
           <circle cx={W/2} cy={innerPad + 8} r={6} fill="none" stroke="#4dd0e1" strokeWidth={0.8} opacity={0.7} />
           <text x={W/2} y={innerPad + 8} textAnchor="middle" dominantBaseline="central" fill="#4dd0e1" fontSize={7} opacity={0.8} fontFamily="sans-serif">②</text>
-          {/* Stirrup outer hoop + m×n cross ties */}
-          {derived.hoopLines.map((line, i) => (
-            <g key={i}>
-              <line
-                x1={toSvgX(line.x1)}
-                y1={toSvgY(line.y1)}
-                x2={toSvgX(line.x2)}
-                y2={toSvgY(line.y2)}
-                stroke={line.kind === 'outer' ? '#78909c' : '#607d8b'}
-                strokeWidth={line.kind === 'outer' ? 2 : 1.5}
-                strokeLinecap="round"
-              />
-              {line.kind === 'crossTie' && (() => {
-                const hookLen = 4 * params.stirrup.diameter * scale;
-                const hd = hookLen * Math.SQRT1_2;
-                const sx1 = toSvgX(line.x1);
-                const sy1 = toSvgY(line.y1);
-                const sx2 = toSvgX(line.x2);
-                const sy2 = toSvgY(line.y2);
-                const vertical = Math.abs(line.x1 - line.x2) < 1e-6;
-                // 两端各画一个 135° 弯钩：沿拉筋方向折回截面内侧，垂直分量取同一侧
-                const hooks = vertical
-                  ? [
-                      { x: sx1, y: sy1, dx: hd, dy: sy1 < sy2 ? hd : -hd },
-                      { x: sx2, y: sy2, dx: hd, dy: sy2 < sy1 ? hd : -hd },
-                    ]
-                  : [
-                      { x: sx1, y: sy1, dx: sx1 < sx2 ? hd : -hd, dy: hd },
-                      { x: sx2, y: sy2, dx: sx2 < sx1 ? hd : -hd, dy: hd },
-                    ];
-                return (
-                  <>
-                    {hooks.map((hk, hi) => (
-                      <line key={hi} x1={hk.x} y1={hk.y} x2={hk.x + hk.dx} y2={hk.y + hk.dy} stroke="#607d8b" strokeWidth={1.5} strokeLinecap="round" />
-                    ))}
-                  </>
-                );
-              })()}
-            </g>
-          ))}
-          {/* 135° stirrup hook, matched to the frame beam section style. */}
+          {/* 外箍筋 — 圆角矩形 (skill: strokeWidth=2.5, rx=3) */}
+          <rect x={sx0} y={sy0} width={sx1 - sx0} height={sy1 - sy0} fill="none" stroke="#78909c" strokeWidth={2.5} rx={3} />
+          {/* 箍筋 135° 弯钩 — skill 画法：从角筋外缘+1px 出发，向截面内侧斜伸 */}
           {topLeftBar && (() => {
-            const outerTop = derived.hoopLines.find((line) => line.kind === 'outer' && Math.abs(line.y1 - line.y2) < 1e-6 && line.y1 > 0);
-            const outerLeft = derived.hoopLines.find((line) => line.kind === 'outer' && Math.abs(line.x1 - line.x2) < 1e-6 && line.x1 < 0);
-            if (!outerTop || !outerLeft) return null;
-            const hookLen = 5 * params.stirrup.diameter * scale;
-            const hd = hookLen * Math.SQRT1_2;
-            const barR = Math.max((topLeftBar.bundle.diameter * scale) / 2, 2.5);
-            const topHookStartX = toSvgX(topLeftBar.x) + barR + 1;
-            const topHookY = toSvgY(outerTop.y1);
-            const leftHookStartY = toSvgY(topLeftBar.y) + barR + 1;
-            const leftHookX = toSvgX(outerLeft.x1);
+            const barRcorner = Math.max((topLeftBar.bundle.diameter * scale) / 2, 3);
+            // 顶边弯钩：从角筋右侧边缘出发，向右下斜伸
+            const topHookStartX = sx0 + barRcorner + gap + 1;
+            // 左边弯钩：从角筋下侧边缘出发，向右下斜伸
+            const leftHookStartY = sy0 + barRcorner + gap + 1;
             return (
               <g>
-                <line x1={topHookStartX} y1={topHookY} x2={topHookStartX + hd} y2={topHookY + hd} stroke="#78909c" strokeWidth={2} strokeLinecap="round" />
-                <line x1={leftHookX} y1={leftHookStartY} x2={leftHookX + hd} y2={leftHookStartY + hd} stroke="#78909c" strokeWidth={2} strokeLinecap="round" />
+                <line x1={topHookStartX} y1={sy0} x2={topHookStartX + hd} y2={sy0 + hd} stroke="#78909c" strokeWidth={2.5} strokeLinecap="round" />
+                <line x1={sx0} y1={leftHookStartY} x2={sx0 + hd} y2={leftHookStartY + hd} stroke="#78909c" strokeWidth={2.5} strokeLinecap="round" />
               </g>
             );
           })()}
-          {/* Rebar dots */}
+          {/* 内箍筋 — 矩形箍包 bMid(黄) 和 hMid(蓝) 两组各4角 */}
+          {(() => {
+            const bMidBars = derived.barPositions.filter((p) => p.kind === 'bMid');
+            const hMidBars = derived.barPositions.filter((p) => p.kind === 'hMid');
+            const innerRects: { x: number; y: number; w: number; h: number }[] = [];
+            const addInnerRect = (bars: typeof derived.barPositions) => {
+              if (bars.length < 4) return;
+              const xs = bars.map((p) => toSvgX(p.x));
+              const ys = bars.map((p) => toSvgY(p.y));
+              const ix0 = Math.min(...xs) - barR - gap;
+              const iy0 = Math.min(...ys) - barR - gap;
+              const ix1 = Math.max(...xs) + barR + gap;
+              const iy1 = Math.max(...ys) + barR + gap;
+              innerRects.push({ x: ix0, y: iy0, w: ix1 - ix0, h: iy1 - iy0 });
+            };
+            addInnerRect(bMidBars);
+            addInnerRect(hMidBars);
+            if (innerRects.length === 0) return null;
+            return (
+              <g>
+                {innerRects.map((r, i) => (
+                  <g key={i}>
+                    <rect x={r.x} y={r.y} width={r.w} height={r.h} fill="none" stroke="#78909c" strokeWidth={2} rx={2} />
+                    {/* 左上角 135° 弯钩：顶边向右下斜伸 */}
+                    <line x1={r.x + barR + gap + 1} y1={r.y} x2={r.x + barR + gap + 1 + hd} y2={r.y + hd} stroke="#78909c" strokeWidth={2} strokeLinecap="round" />
+                    {/* 左边弯钩：从左边向右下斜伸 */}
+                    <line x1={r.x} y1={r.y + barR + gap + 1} x2={r.x + hd} y2={r.y + barR + gap + 1 + hd} stroke="#78909c" strokeWidth={2} strokeLinecap="round" />
+                  </g>
+                ))}
+              </g>
+            );
+          })()}
+          {/* 纵筋圆点 (skill: 最小半径 3px, SVG glow filter) */}
           {derived.barPositions.map((pos, i) => {
             const cx = toSvgX(pos.x);
             const cy = toSvgY(pos.y);
             const dia = pos.bundle.diameter * scale;
             const color = pos.kind === 'corner' ? '#ef5350' : pos.kind === 'bMid' ? '#ffa726' : '#42a5f5';
             return (
-              <circle key={i} cx={cx} cy={cy} r={Math.max(dia / 2, 2.5)} fill={color} filter="drop-shadow(0 0 4px rgba(0,218,243,0.6))" />
+              <circle key={i} cx={cx} cy={cy} r={Math.max(dia / 2, 3)} fill={color} filter="url(#col-glow)" />
             );
           })}
         </svg>
+        </div>
       </div>
     </div>
+    </>
   );
 }
 
@@ -209,6 +234,9 @@ function SectionCutToggle() {
 }
 
 /* ---------- Column Quantities Table ---------- */
+
+const BOM_COLUMN_EXTEND = 500;
+const BOM_BEAM_HEIGHT = 600;
 
 interface RebarRow {
   mark: string;
@@ -260,26 +288,56 @@ function buildColumnRows(params: ColumnParams, d: ReturnType<typeof deriveColumn
   const perimeter = 2 * (params.b - 2 * params.cover) + 2 * (params.h - 2 * params.cover) + 2 * 75 + 2 * 11.9 * params.stirrup.diameter;
   const hoopLength = Math.round(perimeter * hoopUnitCount);
   const floors = params.floors ?? 1;
+  const netH = params.Hn;
+  const hc = Math.max(params.b, params.h);
+  const bh = BOM_BEAM_HEIGHT;
+  const storyH = netH + bh;
+  const spacingDense = params.stirrup.spacingDense;
+  const spacingSparse = params.stirrup.spacingSparse;
+  const denseLen = Math.max(Math.ceil(netH / 6), hc, 500);
+  let totalDense = 0;
+  let totalSparse = 0;
+  let totalCore = 0;
+  // 柱底伸出
+  totalDense += Math.ceil(BOM_COLUMN_EXTEND / spacingDense);
+  for (let f = 0; f < floors; f++) {
+    // 核心区（梁高范围）
+    totalCore += Math.ceil(bh / spacingDense);
+    // 柱加密区 bottom + top
+    totalDense += Math.ceil(denseLen / spacingDense) * 2;
+    // 柱非加密区
+    const sparseH = Math.max(0, netH - denseLen * 2);
+    totalSparse += Math.ceil(sparseH / spacingSparse);
+  }
+  // 顶层核心区（屋面梁）
+  totalCore += Math.ceil(bh / spacingDense);
   rows.push({
     mark: 'G1',
     dia: params.stirrup.diameter,
     grade: params.stirrup.grade,
     length: hoopLength,
-    qty: d.denseStirrupYs.length * floors,
-    note: `加密区箍筋 ${d.stirrupLegs.x}×${d.stirrupLegs.y}@${params.stirrup.spacingDense}`,
+    qty: totalDense,
+    note: `柱加密区箍筋 ${d.stirrupLegs.x}×${d.stirrupLegs.y}@${params.stirrup.spacingDense}`,
   });
-  if (d.sparseStirrupYs.length > 0) {
-    const sparseQty = Math.max(0, d.sparseStirrupYs.length * (floors - 1));
-    if (sparseQty > 0) {
-      rows.push({
-        mark: 'G2',
-        dia: params.stirrup.diameter,
-        grade: params.stirrup.grade,
-        length: hoopLength,
-        qty: sparseQty,
-        note: `非加密区箍筋 ${d.stirrupLegs.x}×${d.stirrupLegs.y}@${params.stirrup.spacingSparse}`,
-      });
-    }
+  if (totalSparse > 0) {
+    rows.push({
+      mark: 'G2',
+      dia: params.stirrup.diameter,
+      grade: params.stirrup.grade,
+      length: hoopLength,
+      qty: totalSparse,
+      note: `非加密区箍筋 ${d.stirrupLegs.x}×${d.stirrupLegs.y}@${params.stirrup.spacingSparse}`,
+    });
+  }
+  if (totalCore > 0) {
+    rows.push({
+      mark: 'G3',
+      dia: params.stirrup.diameter,
+      grade: params.stirrup.grade,
+      length: hoopLength,
+      qty: totalCore,
+      note: `核心区箍筋 ${d.stirrupLegs.x}×${d.stirrupLegs.y}@${params.stirrup.spacingDense}`,
+    });
   }
   return rows;
 }
@@ -289,6 +347,30 @@ function ColumnQuantitiesTable() {
   const d = useMemo(() => deriveColumn(params), [params]);
   const rows = useMemo(() => buildColumnRows(params, d), [params, d]);
   const [tab, setTab] = useState<'bom' | 'cut'>('bom');
+  const [expanded, setExpanded] = useState(false);
+  const [size, setSize] = useState({ w: 500, h: 420 });
+  const [anchor, setAnchor] = useState({ left: 16, bottom: 16 });
+  const panelRef = useRef<HTMLDivElement>(null);
+  const startRef = useRef({ x: 0, y: 0, w: 0, h: 0 });
+  const toggleExpand = useCallback(() => {
+    if (!expanded) {
+      const r = panelRef.current?.getBoundingClientRect();
+      if (r) setAnchor({ left: r.left, bottom: window.innerHeight - r.bottom });
+    }
+    setExpanded((v) => !v);
+  }, [expanded]);
+  const onResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    startRef.current = { x: e.clientX, y: e.clientY, w: size.w, h: size.h };
+    const onMove = (ev: MouseEvent) => setSize({
+      w: Math.max(320, startRef.current.w + (ev.clientX - startRef.current.x)),
+      h: Math.max(220, startRef.current.h + (startRef.current.y - ev.clientY)),
+    });
+    const onUp = () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }, [size]);
 
   const totalSteel = rows.reduce((s, r) => {
     const wPerM = 0.00617 * r.dia * r.dia;
@@ -313,8 +395,26 @@ function ColumnQuantitiesTable() {
   };
 
   return (
-    <div className="flex-1 rounded-xl bg-surface-container/80 backdrop-blur-[20px] border border-white/5 flex flex-col overflow-hidden">
-      <div className="px-4 py-2 border-b border-white/5 bg-surface-container-highest/30 flex justify-between items-center shrink-0">
+    <>
+      {expanded && <div className="flex-1" aria-hidden />}
+    <div
+      ref={panelRef}
+      className={expanded ? 'rounded-xl flex flex-col overflow-hidden shadow-2xl' : 'flex-1 rounded-xl bg-surface-container/80 backdrop-blur-[20px] border border-white/5 flex flex-col overflow-hidden'}
+      style={expanded ? { position: 'fixed', bottom: anchor.bottom, left: anchor.left, width: size.w, height: size.h, zIndex: 9999, background: 'rgba(13,13,13,0.97)', border: '1px solid rgba(0,218,243,0.25)', boxShadow: '0 8px 48px rgba(0,0,0,0.8)' } : {}}
+    >
+      {expanded && (
+        <div
+          style={{ position: 'absolute', top: 0, right: 0, width: 20, height: 20, cursor: 'ne-resize', zIndex: 10 }}
+          onMouseDown={onResizeStart}
+          title="拖动调整大小"
+        />
+      )}
+      <div
+        className="px-4 py-2 border-b border-white/5 bg-surface-container-highest/30 flex justify-between items-center shrink-0 select-none"
+        style={{ cursor: 'pointer' }}
+        onDoubleClick={toggleExpand}
+        title={expanded ? '双击还原' : '双击放大'}
+      >
         <SlideToggle
           value={tab}
           onChange={setTab}
@@ -374,6 +474,7 @@ function ColumnQuantitiesTable() {
       </>
       )}
     </div>
+    </>
   );
 }
 

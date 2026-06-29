@@ -99,6 +99,7 @@ function SectionView() {
   const [expanded, setExpanded] = useState(false);
   const [size, setSize] = useState({ w: 400, h: 420 });
   const [anchor, setAnchor] = useState({ right: 16, bottom: 16 });
+  const [zoom, setZoom] = useState(1);
   const panelRef = useRef<HTMLDivElement>(null);
   const startRef = useRef({ x: 0, y: 0, w: 0, h: 0 });
   const toggleExpand = useCallback(() => {
@@ -300,7 +301,16 @@ function SectionView() {
         </h3>
         <SectionCutButton />
       </div>
-      <div className="flex-1 p-4 flex flex-col items-center justify-center relative bg-surface-container-lowest gap-2">
+      <div className="flex-1 p-4 flex flex-col items-center justify-center relative bg-surface-container-lowest gap-2 overflow-hidden"
+        onWheel={(e) => {
+          if (!expanded) {
+            e.preventDefault();
+            setZoom((z) => Math.max(0.5, Math.min(5, z - e.deltaY * 0.002)));
+          }
+        }}
+        style={{ cursor: zoom !== 1 && !expanded ? 'grab' : 'default' }}
+      >
+        <div style={{ transform: `scale(${zoom})`, transformOrigin: 'center center', transition: 'transform 0.05s' }}>
         <svg width={svgW} height={svgH} viewBox={`0 0 ${W} ${H}`}>
           <defs>
             <filter id="glow">
@@ -431,6 +441,7 @@ function SectionView() {
           })}
 
         </svg>
+        </div>
       </div>
     </div>
     </>

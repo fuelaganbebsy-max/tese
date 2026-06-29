@@ -79,14 +79,15 @@ export const COLUMN_EXTEND = 500;
 
 /** 由柱净高生成默认竖向布局（供场景与下料表共用，保持一致） */
 export function makeColumnLayout(Hn: number, beamHeight = COLUMN_TOP_BEAM_HEIGHT, extend = COLUMN_EXTEND, floors = 1): ColumnLayout {
+  const storyH = Hn + beamHeight;
   return {
     botY: -extend,
     floorY: 0,
-    topBeamBottomY: floors * Hn,
-    topBeamTopY: floors * Hn + beamHeight,
-    topY: floors * Hn + beamHeight,
+    topBeamBottomY: floors * storyH,
+    topBeamTopY: floors * storyH + beamHeight,
+    topY: floors * storyH + beamHeight,
     floorCount: floors,
-    floorHeight: Hn,
+    floorHeight: storyH,
   };
 }
 
@@ -185,22 +186,9 @@ function topAnchorPoints(
 function baseAnchorPoints(
   x: number,
   z: number,
-  d: number,
   layout: ColumnLayout,
-  baseType: string,
 ): THREE.Vector3[] {
-  if (baseType === 'foundation') {
-    // 基础插筋：竖直至基础底，再 ≥max(6d,150) 水平弯折（指向截面中心）
-    const bend = Math.max(6 * d, 150);
-    const radial = new THREE.Vector2(x, z);
-    if (radial.length() < 1e-6) radial.set(1, 0);
-    radial.normalize().negate();
-    return [
-      new THREE.Vector3(x + radial.x * bend, layout.botY, z + radial.y * bend),
-      new THREE.Vector3(x, layout.botY, z),
-    ];
-  }
-  // 楼层柱根：直通下层
+  // 柱底直通，不弯折
   return [new THREE.Vector3(x, layout.botY, z)];
 }
 
@@ -252,7 +240,7 @@ export function buildColumnLongitudinal(
 
       // 下筋：柱底 → 搭接顶
       const lowerPts = [
-        ...baseAnchorPoints(x, z, d, layout, baseType),
+        ...baseAnchorPoints(x, z, layout),
         new THREE.Vector3(x, lapTop, z),
       ];
       bars.push({
@@ -277,7 +265,7 @@ export function buildColumnLongitudinal(
       // 机械连接 / 焊接：连续筋在接头处对接，附套筒/焊点标记
       const top = topAnchorPoints(x, z, d, layout, outer, topOpts);
       const fullPts = dedupe([
-        ...baseAnchorPoints(x, z, d, layout, baseType),
+        ...baseAnchorPoints(x, z, layout),
         ...top.pts,
       ]);
       const connNote = connType === 'mechanical' ? '机械连接' : '焊接';
