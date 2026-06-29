@@ -11,10 +11,8 @@ import { BeamScene } from './scene/BeamScene';
 import { ColumnScene } from './scene/ColumnScene';
 import { BeamParamContent } from './ui/param/BeamParamContent';
 import { ColumnParamContent } from './ui/param/ColumnParamContent';
-import {
-  BeamDataContent,
-  ColumnDataContent,
-} from './ui/DataPanel';
+import { BeamDataContent } from './ui/data/BeamDataContent';
+import { ColumnDataContent } from './ui/data/ColumnDataContent';
 
 export interface MemberEntry {
   /** 侧边栏和标题显示的名称 */

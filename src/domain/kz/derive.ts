@@ -1,6 +1,13 @@
 // 框架柱 KZ — 派生计算 (22G101-1)
 import type { ColumnBarGroupKind, ColumnParams, ColumnStirrupSpec } from './types';
 import type { RebarBundle } from '../kl/types';
+import {
+  columnDenseZoneRoot,
+  columnDenseZoneEnd,
+  columnConnectionOffset,
+  llE,
+  type LapRatio,
+} from '../codes/22G101';
 
 export interface ColumnBarPosition {
   x: number;
@@ -40,6 +47,12 @@ export interface ColumnDerived {
   stirrupLegs: { x: number; y: number };
   /** 截面箍筋线条，用于剖面图表达 m×n */
   hoopLines: ColumnHoopLine[];
+  /** 纵筋抗震搭接长度 llE (mm) */
+  lapLength: number;
+  /** 连接点距柱根楼面高度 (mm) = Hn/3 */
+  connectionOffset: number;
+  /** 相邻纵筋连接错开净距 (mm) ≥ 0.3 llE */
+  connectionStagger: number;
 }
 
 function cloneBundle(bundle: RebarBundle, count = bundle.count): RebarBundle {
@@ -54,39 +67,31 @@ function normalLegs(stirrup: ColumnStirrupSpec): { x: number; y: number } {
   };
 }
 
-/**
- * 加密区计算 — 22G101-1 P.52
- * 柱底: max(Hn/6, Hc, 500)  (一级抗震)
- *        max(Hn/6, Hc, 500)  (二级)
- *        max(Hn/6, Hc, 500)  (三四级可取 Hn/6 但不小于 Hc 和 500)
- * 柱顶(梁下): 同上
- */
-function calcDenseZone(params: ColumnParams): number {
-  const Hc = Math.max(params.b, params.h);
-  const candidates = [params.Hn / 6, Hc, 500];
-  return Math.ceil(Math.max(...candidates));
+/** 柱截面长边尺寸 hc */
+function columnHc(params: ColumnParams): number {
+  return Math.max(params.b, params.h);
 }
 
 /**
- * 纵筋排布坐标
- * 矩形柱: 4 角 + 各边均匀分布
- * 圆柱: 沿圆周均布
+ * 柱端箍筋加密区计算 — 22G101-1 P.65 KZ 箍筋加密区范围
+ *   - 柱根(嵌固部位 = 基础顶)：Hn/3
+ *   - 其余柱端(上/下)：max(Hn/6, hc, 500)
+ */
+function calcDenseZoneBottom(params: ColumnParams): number {
+  const isRoot = (params.baseType ?? 'foundation') === 'foundation';
+  return isRoot ? columnDenseZoneRoot(params.Hn) : columnDenseZoneEnd(params.Hn, columnHc(params));
+}
+
+function calcDenseZoneTop(params: ColumnParams): number {
+  return columnDenseZoneEnd(params.Hn, columnHc(params));
+}
+
+/**
+ * 纵筋排布坐标 (矩形柱: 4 角 + 各边均匀分布)
  */
 function calcBarPositions(params: ColumnParams): ColumnBarPosition[] {
   const positions: ColumnBarPosition[] = [];
 
-  if (params.sectionType === 'circle') {
-    const r = params.D / 2 - params.cover - params.longitudinal.diameter / 2;
-    const n = params.longitudinal.count;
-    const bundle = cloneBundle(params.longitudinal, 1);
-    for (let i = 0; i < n; i++) {
-      const angle = (2 * Math.PI * i) / n - Math.PI / 2;
-      positions.push({ x: r * Math.cos(angle), y: r * Math.sin(angle), kind: 'corner', bundle });
-    }
-    return positions;
-  }
-
-  // 矩形柱
   const mode = params.longitudinalMode ?? 'uniform';
   const corner = cloneBundle(params.cornerBar ?? params.longitudinal, 1);
   const uniformMid = Math.max(0, params.longitudinal.count - 2);
@@ -125,11 +130,26 @@ function calcBarPositions(params: ColumnParams): ColumnBarPosition[] {
 /**
  * 箍筋 Y 坐标列表 (沿柱高方向)
  */
-function calcStirrupYs(params: ColumnParams, denseBottom: number, denseTop: number): { all: number[]; dense: number[]; sparse: number[] } {
+interface LapZone {
+  /** 搭接区起点 (距柱根, mm) */
+  start: number;
+  /** 搭接区终点 (mm) */
+  end: number;
+  /** 搭接区箍筋间距 ≤ min(5d, 100) (mm) */
+  spacing: number;
+}
+
+function calcStirrupYs(
+  params: ColumnParams,
+  denseBottom: number,
+  denseTop: number,
+  lapZone: LapZone | null,
+): { all: number[]; dense: number[]; sparse: number[] } {
   const dense: number[] = [];
   const sparse: number[] = [];
   const H = params.Hn;
   const { spacingDense, spacingSparse } = params.stirrup;
+  const inLap = (v: number) => lapZone != null && v >= lapZone.start && v < lapZone.end;
 
   // 底部加密区
   let y = spacingDense / 2;
@@ -138,12 +158,22 @@ function calcStirrupYs(params: ColumnParams, denseBottom: number, denseTop: numb
     y += spacingDense;
   }
 
-  // 中部非加密区
+  // 中部非加密区（搭接区范围内跳过，改由下方按加密间距填充）
   y = denseBottom + spacingSparse / 2;
   const topStart = H - denseTop;
   while (y < topStart) {
-    sparse.push(y);
+    if (!inLap(y)) sparse.push(y);
     y += spacingSparse;
+  }
+
+  // 搭接区箍筋加密 (22G101-1 / 文档 7.2.2-(2)：间距 ≤ min(5d,100))
+  if (lapZone) {
+    let ly = Math.max(lapZone.start, denseBottom);
+    const lyEnd = Math.min(lapZone.end, topStart);
+    while (ly < lyEnd) {
+      dense.push(ly);
+      ly += lapZone.spacing;
+    }
   }
 
   // 顶部加密区
@@ -180,12 +210,34 @@ function calcHoopLines(params: ColumnParams): ColumnHoopLine[] {
 }
 
 export function deriveColumn(params: ColumnParams): ColumnDerived {
-  const totalHeight = params.floorHeight;
-  const denseZoneBottom = calcDenseZone(params);
-  const denseZoneTop = calcDenseZone(params);
+  const floors = params.floors ?? 1;
+  const totalHeight = params.floorHeight * floors;
+  const denseZoneBottom = calcDenseZoneBottom(params);
+  const denseZoneTop = calcDenseZoneTop(params);
   const sparseZone = Math.max(0, params.Hn - denseZoneBottom - denseZoneTop);
   const barPositions = calcBarPositions(params);
-  const stirrupYGroups = calcStirrupYs(params, denseZoneBottom, denseZoneTop);
+
+  const lapRatio = (params.lapRatio ?? 50) as LapRatio;
+  const lapLength = llE(
+    params.longitudinal.grade,
+    params.longitudinal.diameter,
+    params.concrete,
+    params.seismic,
+    lapRatio,
+  );
+  const connectionOffset = columnConnectionOffset(params.Hn);
+  const connectionStagger = Math.ceil(0.3 * lapLength);
+
+  // 绑扎搭接时，搭接区(含两批错开)箍筋按 ≤min(5d,100) 加密
+  const isTie = (params.connectionType ?? 'tie') === 'tie';
+  const lapZone = isTie
+    ? {
+        start: connectionOffset,
+        end: connectionOffset + lapLength + connectionStagger,
+        spacing: Math.min(Math.round(5 * params.longitudinal.diameter), 100, params.stirrup.spacingDense),
+      }
+    : null;
+  const stirrupYGroups = calcStirrupYs(params, denseZoneBottom, denseZoneTop, lapZone);
 
   return {
     totalHeight,
@@ -199,6 +251,29 @@ export function deriveColumn(params: ColumnParams): ColumnDerived {
     sparseStirrupYs: stirrupYGroups.sparse,
     stirrupLegs: normalLegs(params.stirrup),
     hoopLines: calcHoopLines(params),
+    lapLength,
+    connectionOffset,
+    connectionStagger,
+  };
+}
+
+export function normalizeColumnParams(input: unknown): ColumnParams {
+  const raw = {
+    ...defaultColumn(),
+    ...(input as Partial<Omit<ColumnParams, 'sectionType'>> & { D?: number; sectionType?: string }),
+  };
+  if (raw.sectionType === 'circle') {
+    const diameter = typeof raw.D === 'number' && Number.isFinite(raw.D) && raw.D > 0
+      ? raw.D
+      : Math.max(raw.b, raw.h);
+    raw.b = diameter;
+    raw.h = diameter;
+  }
+
+  const { D: _legacyDiameter, ...params } = raw;
+  return {
+    ...params,
+    sectionType: 'rect',
   };
 }
 
@@ -207,7 +282,6 @@ export function defaultColumn(): ColumnParams {
     sectionType: 'rect',
     b: 600,
     h: 600,
-    D: 600,
     Hn: 3600,
     beamHeight: 600,
     floorHeight: 3600,
@@ -230,5 +304,10 @@ export function defaultColumn(): ColumnParams {
       legsY: 3,
       typeNo: 1,
     },
+    connectionType: 'tie',
+    lapRatio: 50,
+    position: 'middle',
+    baseType: 'foundation',
+    floors: 2,
   };
 }

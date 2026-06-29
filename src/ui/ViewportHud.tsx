@@ -31,9 +31,7 @@ export function ViewportHud() {
 
   const dimLabel = isBeam
     ? `${beamParams.b}\u00d7${beamParams.h}`
-    : colParams.sectionType === 'circle'
-      ? `\u2205${colParams.D}`
-      : `${colParams.b}\u00d7${colParams.h}`;
+    : `${colParams.b}\u00d7${colParams.h}`;
   const layerToggles = isBeam
     ? ([
       ['showConcrete', 'deployed_code', '混凝土'],
@@ -93,7 +91,7 @@ export function ViewportHud() {
         </div>
       </div>
 
-      {/* Section Cut Slider - horizontal at bottom of 3D viewport */}
+      {/* Section Cut Slider */}
       {isBeam && beamView.showSectionCut && (
         <div className="absolute bottom-12 left-4 right-4 pointer-events-auto z-10 flex items-center gap-2">
           <input
@@ -104,6 +102,21 @@ export function ViewportHud() {
             className="flex-1"
           />
           <span className="text-[9px] text-primary-fixed-dim font-mono shrink-0 w-8 text-right">{Math.round((beamView.sectionCutX ?? 0.5) * 100)}%</span>
+        </div>
+      )}
+      {!isBeam && view.showSectionCut && (
+        <div className="absolute top-1/2 -translate-y-1/2 left-3 pointer-events-auto z-10 flex flex-col items-center gap-1">
+          <span className="text-[8px] text-primary-fixed-dim/60 font-mono leading-none">▴</span>
+          <input
+            type="range"
+            min={0} max={100} step={1}
+            value={Math.round((view.sectionCutY ?? 0.5) * 100)}
+            onChange={(e) => setView({ sectionCutY: Number(e.target.value) / 100 })}
+            className="h-40 w-1.5"
+            style={{ writingMode: 'vertical-lr', direction: 'rtl', accentColor: '#00daf3' }}
+          />
+          <span className="text-[8px] text-primary-fixed-dim/60 font-mono leading-none">▾</span>
+          <span className="text-[9px] text-primary-fixed-dim font-mono mt-0.5">{Math.round((view.sectionCutY ?? 0.5) * 100)}%</span>
         </div>
       )}
 

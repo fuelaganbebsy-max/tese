@@ -6,7 +6,7 @@ import { useSelectionStore } from '../store/selectionStore';
 import { derive } from '../domain/kl/derive';
 import { buildBottom, buildMidBars, buildTieBars, buildTopSupport, buildTopThrough, type RebarBuilt } from '../geometry/buildLongitudinal';
 import { buildStirrupUnitGeometry } from '../geometry/buildStirrup';
-import { stirrupHookStraight } from '../domain/codes/22G101';
+import { stirrupHookStraight } from '../domain/kl/codes/22G101';
 import { cutShapeFromPolyline, stirrupCutShape } from '../domain/rebarShape';
 
 const HIGHLIGHT_COLOR = '#ffffff';

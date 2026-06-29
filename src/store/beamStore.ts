@@ -12,6 +12,7 @@ interface ViewState {
   showColumns: boolean;
   showSectionCut: boolean;
   sectionCutX: number;
+  sectionCutY: number;
   showAnnotationTopLeft: boolean;
   showAnnotationTopRight: boolean;
   showAnnotationStirrup: boolean;
@@ -49,7 +50,7 @@ interface BeamStore {
 export const useBeamStore = create<BeamStore>()(persist(
   (set, get) => ({
   params: defaultBeam(),
-  view: { showConcrete: true, showStirrups: true, showLongitudinal: true, showAnnotations: true, showColumns: true, showSectionCut: false, sectionCutX: 0.5, showAnnotationTopLeft: true, showAnnotationTopRight: true, showAnnotationStirrup: true, showAnnotationNetSpan: true },
+  view: { showConcrete: true, showStirrups: true, showLongitudinal: true, showAnnotations: true, showColumns: true, showSectionCut: false, sectionCutX: 0.5, sectionCutY: 0.5, showAnnotationTopLeft: true, showAnnotationTopRight: true, showAnnotationStirrup: true, showAnnotationNetSpan: true },
   ui: { sideNavCollapsed: false, inspectorCollapsed: false, dataPanelCollapsed: false },
   cameraCommand: null,
   _history: [],

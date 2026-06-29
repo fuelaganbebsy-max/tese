@@ -3,9 +3,16 @@
 
 import type { ConcreteGrade, SeismicLevel, RebarGrade, RebarBundle } from '../kl/types';
 
-export type ColumnSectionType = 'rect' | 'circle';
+export type ColumnSectionType = 'rect';
 export type ColumnLongitudinalMode = 'uniform' | 'grouped';
 export type ColumnBarGroupKind = 'corner' | 'bMid' | 'hMid';
+
+/** 纵筋连接方式 (22G101-1 P.63 KZ 纵向钢筋连接构造) */
+export type ColumnConnectionType = 'tie' | 'mechanical' | 'welded';
+/** 柱在平面中的位置：中柱 / 边柱 / 角柱 (决定柱顶纵筋锚固做法) */
+export type ColumnPosition = 'middle' | 'edge' | 'corner';
+/** 柱根类型：基础顶 / 楼层 (决定柱根加密区与插筋构造) */
+export type ColumnBaseType = 'foundation' | 'floor';
 
 export interface ColumnStirrupSpec {
   grade: RebarGrade;
@@ -41,8 +48,6 @@ export interface ColumnParams {
   b: number;
   /** 矩形柱高 h (mm) */
   h: number;
-  /** 圆柱直径 D (mm) — 仅 sectionType='circle' 时使用 */
-  D: number;
   /** 柱净高 Hn (mm) */
   Hn: number;
   /** 梁高 (mm) */
@@ -65,4 +70,14 @@ export interface ColumnParams {
   hSideMidBar?: RebarBundle;
   /** 箍筋 */
   stirrup: ColumnStirrupSpec;
+  /** 纵筋连接方式 (默认 tie 绑扎搭接) */
+  connectionType?: ColumnConnectionType;
+  /** 同一连接区段搭接接头面积百分率 (默认 50) */
+  lapRatio?: 25 | 50 | 100;
+  /** 柱位置：中柱/边柱/角柱 (默认 middle) */
+  position?: ColumnPosition;
+  /** 柱根类型：基础顶/楼层 (默认 foundation) */
+  baseType?: ColumnBaseType;
+  /** 层数 (默认 1) */
+  floors?: number;
 }

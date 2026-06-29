@@ -141,10 +141,7 @@ function createColumnToolResults(params: ColumnParams, derived: ReturnType<typeo
       tool: 'summarize_current_member',
       title: '当前柱参数摘要',
       data: {
-        section:
-          params.sectionType === 'circle'
-            ? `D${params.D}mm`
-            : `${params.b}x${params.h}mm`,
+        section: `${params.b}x${params.h}mm`,
         clearHeight: `${params.Hn}mm`,
         beamHeight: `${params.beamHeight}mm`,
         floorHeight: `${params.floorHeight}mm`,

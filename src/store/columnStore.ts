@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { ColumnParams } from '../domain/kz/types';
-import { defaultColumn } from '../domain/kz/derive';
+import { defaultColumn, normalizeColumnParams } from '../domain/kz/derive';
 
 interface ViewState {
   showConcrete: boolean;
@@ -9,6 +9,8 @@ interface ViewState {
   showLongitudinal: boolean;
   showAnnotations: boolean;
   showColumns: boolean;
+  showSectionCut: boolean;
+  sectionCutY: number;
 }
 
 interface UiState {
@@ -41,14 +43,14 @@ interface ColumnStore {
 export const useColumnStore = create<ColumnStore>()(persist(
   (set, get) => ({
     params: defaultColumn(),
-    view: { showConcrete: true, showStirrups: true, showLongitudinal: true, showAnnotations: true, showColumns: true },
+    view: { showConcrete: true, showStirrups: true, showLongitudinal: true, showAnnotations: true, showColumns: true, showSectionCut: false, sectionCutY: 0.5 },
     ui: { sideNavCollapsed: false, inspectorCollapsed: false, dataPanelCollapsed: false },
     cameraCommand: null,
     _history: [],
     _future: [],
     setParams: (updater) => set((s) => {
       const newHistory = [...s._history, s.params].slice(-MAX_HISTORY);
-      return { params: updater(s.params), _history: newHistory, _future: [] };
+      return { params: normalizeColumnParams(updater(s.params)), _history: newHistory, _future: [] };
     }),
     setView: (patch) => set((s) => ({ view: { ...s.view, ...patch } })),
     setUi: (patch) => set((s) => ({ ui: { ...s.ui, ...patch } })),
@@ -87,6 +89,9 @@ export const useColumnStore = create<ColumnStore>()(persist(
       try {
         // 后续版本升级时在此按版本补齐缺失字段，例如：
         // if (persisted?.params && persisted.params.newField == null) persisted.params.newField = defaultValue;
+        if (persisted?.params) {
+          persisted.params = normalizeColumnParams(persisted.params);
+        }
         return persisted;
       } catch {
         // 迁移失败时清除坏数据，使用全新默认值

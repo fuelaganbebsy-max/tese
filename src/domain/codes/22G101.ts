@@ -53,3 +53,90 @@ export function densifiedZoneLength(h: number, seismic: SeismicLevel): number {
 export function stirrupHookStraight(d: number): number {
   return Math.max(10 * d, 75);
 }
+
+// ─── 柱 (KZ) 专用构造参数 (22G101-1 P.62~P.67) ──────────────────────
+
+/** 同一连接区段内搭接接头面积百分率 */
+export type LapRatio = 25 | 50 | 100;
+
+/**
+ * 纵向受拉钢筋搭接长度修正系数 ζl (22G101-1 P.62 注7)：
+ *   ≤25% → 1.2；50% → 1.4；100% → 1.6
+ */
+export function lapFactor(ratio: LapRatio): number {
+  return ratio <= 25 ? 1.2 : ratio <= 50 ? 1.4 : 1.6;
+}
+
+/**
+ * 纵向受拉钢筋抗震搭接长度 llE = ζl · laE (22G101-1 P.62)。
+ * 任何情况下不应小于 300mm。
+ */
+export function llE(
+  grade: RebarGrade,
+  d: number,
+  concrete: ConcreteGrade,
+  seismic: SeismicLevel,
+  ratio: LapRatio = 50,
+): number {
+  return Math.max(300, Math.round(lapFactor(ratio) * laE(grade, d, concrete, seismic)));
+}
+
+/**
+ * 柱根(嵌固部位)箍筋加密区长度 = Hn/3 (22G101-1 P.65 KZ 箍筋加密区范围)。
+ */
+export function columnDenseZoneRoot(Hn: number): number {
+  return Math.ceil(Hn / 3);
+}
+
+/**
+ * 柱端(非嵌固)箍筋加密区长度 = max(Hn/6, hc, 500) (22G101-1 P.65)。
+ * hc 为柱截面长边尺寸。
+ */
+export function columnDenseZoneEnd(Hn: number, hc: number): number {
+  return Math.ceil(Math.max(Hn / 6, hc, 500));
+}
+
+/**
+ * 柱顶纵筋节点内弯锚水平段长度 = 12d (22G101-1 P.67 KZ 中柱柱顶纵向钢筋构造 ①)。
+ */
+export function columnTopBend(d: number): number {
+  return 12 * d;
+}
+
+/**
+ * 柱纵筋连接点距楼面(柱根)的最小高度 = Hn/3，以避开柱端箍筋加密区
+ * (22G101-1 P.63 KZ 纵向钢筋连接构造)。
+ */
+export function columnConnectionOffset(Hn: number): number {
+  return Math.ceil(Hn / 3);
+}
+
+/**
+ * 受拉钢筋基本锚固长度 labE (mm)。示意级近似取 = laE
+ * （laE = ζaE·labE，常规情况 ζaE=1，故数值上取等；仅用于可视化）。
+ */
+export function labE(grade: RebarGrade, d: number, concrete: ConcreteGrade, seismic: SeismicLevel): number {
+  return laE(grade, d, concrete, seismic);
+}
+
+/**
+ * 中柱柱顶纵筋是否可直锚 (7.3.1)：自梁底算起的可用竖向锚固高度 ≥ laE 时采用直锚，
+ * 否则需 90° 弯锚 (7.3.2)。availableVertical 为梁底至柱顶的竖向净空 (mm)。
+ */
+export function columnTopCanStraightAnchor(
+  availableVertical: number,
+  grade: RebarGrade,
+  d: number,
+  concrete: ConcreteGrade,
+  seismic: SeismicLevel,
+): boolean {
+  return availableVertical >= laE(grade, d, concrete, seismic);
+}
+
+/**
+ * 边/角柱顶节点外侧纵筋与梁上部钢筋搭接长度 = 1.5·labE
+ * (22G101-1 P.66 / 文档 7.4.1 柱纵筋在梁内搭接)。
+ */
+export function columnTopOuterLap(grade: RebarGrade, d: number, concrete: ConcreteGrade, seismic: SeismicLevel): number {
+  return Math.round(1.5 * labE(grade, d, concrete, seismic));
+}

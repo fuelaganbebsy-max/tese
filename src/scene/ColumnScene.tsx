@@ -1,6 +1,6 @@
 import { Canvas, useThree } from '@react-three/fiber';
 import type { ThreeEvent } from '@react-three/fiber';
-import { OrbitControls, GizmoHelper, GizmoViewport, Grid, Environment } from '@react-three/drei';
+import { OrbitControls, GizmoHelper, GizmoViewport, Grid, Environment, Line } from '@react-three/drei';
 import { useMemo, useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { deriveColumn } from '../domain/kz/derive';
@@ -10,7 +10,8 @@ import { useSelectionStore } from '../store/selectionStore';
 import { buildFreecadStirrupGeometry } from '../geometry/freecadStirrup';
 import { tubeFromPolyline } from '../geometry/rebarPath';
 import { stirrupHookStraight } from '../domain/codes/22G101';
-import { straightBarCutShape, stirrupCutShape, cutShapeFromPolyline } from '../domain/rebarShape';
+import { stirrupCutShape, cutShapeFromPolyline } from '../domain/rebarShape';
+import { buildColumnLongitudinal, type ColumnLayout } from '../geometry/buildColumnLongitudinal';
 
 const BAR_LABELS = { corner: '角筋', bMid: 'b边中部筋', hMid: 'h边中部筋' } as const;
 const HIGHLIGHT_COLOR = '#ffffff';
@@ -26,12 +27,12 @@ const BEAM_PROJECTION = 800;
 
 /** 柱底 Y 坐标 */
 const COL_BOTTOM = -COLUMN_EXTEND;
-/** 柱顶 Y 坐标 = Hn + 梁高 + 上侧伸出 */
-const colTop = (Hn: number) => Hn + BEAM_HEIGHT + COLUMN_EXTEND;
+/** 柱顶 Y 坐标 = floors*Hn + 梁高（柱顶到屋面即止，无伸出） */
+const colTop = (Hn: number, floors: number) => floors * Hn + BEAM_HEIGHT;
 /** 柱总高 */
-const colTotalH = (Hn: number) => colTop(Hn) - COL_BOTTOM;
+const colTotalH = (Hn: number, floors: number) => colTop(Hn, floors) - COL_BOTTOM;
 /** 柱几何中心 Y */
-const colCenterY = (Hn: number) => (colTop(Hn) + COL_BOTTOM) / 2;
+const colCenterY = (Hn: number, floors: number) => (colTop(Hn, floors) + COL_BOTTOM) / 2;
 
 const BAR_COLORS = {
   corner: '#ef5350',
@@ -42,17 +43,13 @@ const BAR_COLORS = {
 // ─── 柱体混凝土 ───────────────────────────────────────────
 function ColumnConcrete({ params, show }: { params: ColumnParams; show: boolean }) {
   const geo = useMemo(() => {
-    const totalH = colTotalH(params.Hn);
-    const cy = colCenterY(params.Hn);
-    if (params.sectionType === 'circle') {
-      const g = new THREE.CylinderGeometry(params.D / 2, params.D / 2, totalH, 32);
-      g.translate(0, cy, 0);
-      return g;
-    }
+    const floors = params.floors ?? 1;
+    const totalH = colTotalH(params.Hn, floors);
+    const cy = colCenterY(params.Hn, floors);
     const g = new THREE.BoxGeometry(params.b, totalH, params.h);
     g.translate(0, cy, 0);
     return g;
-  }, [params.sectionType, params.b, params.h, params.D, params.Hn]);
+  }, [params.b, params.h, params.Hn, params.floors]);
 
   if (!show) return null;
 
@@ -63,18 +60,34 @@ function ColumnConcrete({ params, show }: { params: ColumnParams; show: boolean 
   );
 }
 
-// ─── 可点选纵筋 ──────────────────────────────────────────
+/** 柱竖向布局（与场景中绘制的梁/柱伸出段一致） */
+function columnLayout(Hn: number, floors: number): ColumnLayout {
+  return {
+    botY: COL_BOTTOM,
+    floorY: 0,
+    topBeamBottomY: floors * Hn,
+    topBeamTopY: floors * Hn + BEAM_HEIGHT,
+    topY: floors * Hn + BEAM_HEIGHT,
+    floorCount: floors,
+    floorHeight: Hn,
+  };
+}
+
+// ─── 可点选纵筋（折线管状几何，含搭接/连接/弯锚） ────────────
 function ColPickableBar({
-  geo, color, barKey, length, grade, diameter, label,
-}: { geo: THREE.BufferGeometry; color: string; barKey: string; length: number; grade: string; diameter: number; label: string }) {
+  geo, color, barKey, points, grade, diameter, label, note,
+}: {
+  geo: THREE.BufferGeometry; color: string; barKey: string;
+  points: THREE.Vector3[]; grade: string; diameter: number; label: string; note?: string;
+}) {
   const selectedKey = useSelectionStore((s) => s.selectedKey);
   const active = selectedKey === barKey;
   const handleClick = (e: ThreeEvent<MouseEvent>) => {
     e.stopPropagation();
-    // 竖向两点折线 → 下料图中保持柱纵筋的竖直方向
+    // 用真实中心线折线生成下料简图（保留搭接/弯锚形状）
     const shape = cutShapeFromPolyline(
-      [{ x: 0, y: 0, z: 0 }, { x: 0, y: length, z: 0 }],
-      { mark: label, grade, diameter, note: '按柱净高，未计入搭接/连接' },
+      points.map((p) => ({ x: p.x, y: p.y, z: p.z })),
+      { mark: label, grade, diameter, note },
     );
     useSelectionStore.getState().select(shape, barKey);
   };
@@ -98,40 +111,39 @@ function ColPickableBar({
   );
 }
 
-// ─── 纵筋（全长） ─────────────────────────────────────────
+// ─── 纵筋（连接构造 + 柱顶锚固 + 柱根插筋） ─────────────────
 function ColumnLongBars({ params, derived, show }: { params: ColumnParams; derived: ReturnType<typeof deriveColumn>; show: boolean }) {
-  const totalL = colTotalH(params.Hn);
-  const bars = useMemo(() => {
-    const cy = colCenterY(params.Hn);
-    return derived.barPositions.map((pos, i) => {
-      const r = pos.bundle.diameter / 2;
-      const geo = new THREE.CylinderGeometry(r, r, totalL, 8);
-      geo.translate(pos.x, cy, pos.y);
-      return {
-        geo,
-        color: BAR_COLORS[pos.kind],
-        key: `col-bar-${i}`,
-        grade: pos.bundle.grade as string,
-        dia: pos.bundle.diameter,
-        label: `柱${BAR_LABELS[pos.kind]} #${i + 1}`,
-      };
-    });
-  }, [derived.barPositions, params.Hn, totalL]);
+  const floors = params.floors ?? 1;
+  const result = useMemo(
+    () => buildColumnLongitudinal(params, derived, columnLayout(params.Hn, floors)),
+    [params, derived, floors],
+  );
 
   if (!show) return null;
   return (
     <>
-      {bars.map((b) => (
+      {result.bars.map((b) => (
         <ColPickableBar
-          key={b.key}
-          geo={b.geo}
+          key={b.barKey}
+          geo={b.geometry}
           color={b.color}
-          barKey={b.key}
-          length={params.Hn}
-          grade={b.grade}
-          diameter={b.dia}
-          label={b.label}
+          barKey={b.barKey}
+          points={b.points}
+          grade={b.meta.grade}
+          diameter={b.meta.diameter}
+          label={b.meta.label}
+          note={b.meta.note}
         />
+      ))}
+      {result.markers.map((m, i) => (
+        <mesh key={`conn-${i}`} geometry={m.geometry}>
+          <meshStandardMaterial
+            color={m.type === 'mechanical' ? '#cfd8dc' : '#ffcc80'}
+            metalness={0.85}
+            roughness={0.3}
+            envMapIntensity={1.3}
+          />
+        </mesh>
       ))}
     </>
   );
@@ -265,9 +277,10 @@ function ColumnStirrupInstances({ geometry, ys, color, onPick, active }: { geome
 
 /** 计算沿柱全长（含伸出段）的箍筋 Y 坐标 */
 function computeFullStirrupYs(params: ColumnParams, derived: ReturnType<typeof deriveColumn>) {
+  const floors = params.floors ?? 1;
   const { spacingDense } = params.stirrup;
   const bottom = COL_BOTTOM;
-  const top = colTop(params.Hn);
+  const top = colTop(params.Hn, floors);
 
   // 柱底伸出段（底部 → y=0）
   const extraBelow: number[] = [];
@@ -277,9 +290,9 @@ function computeFullStirrupYs(params: ColumnParams, derived: ReturnType<typeof d
     y += spacingDense;
   }
 
-  // 柱顶伸出段（y=Hn → 顶部）
+  // 柱顶伸出段（y=楼层顶 → 柱顶）
   const extraAbove: number[] = [];
-  y = params.Hn + spacingDense;
+  y = floors * params.Hn + spacingDense;
   while (y < top) {
     extraAbove.push(y);
     y += spacingDense;
@@ -292,36 +305,18 @@ function computeFullStirrupYs(params: ColumnParams, derived: ReturnType<typeof d
 }
 
 function ColumnStirrups({ params, derived, show }: { params: ColumnParams; derived: ReturnType<typeof deriveColumn>; show: boolean }) {
+  const floors = params.floors ?? 1;
   const unitGeo = useMemo(() => {
-    const c = params.cover + params.stirrup.diameter / 2;
-    const r = params.stirrup.diameter / 2;
-
-    if (params.sectionType === 'circle') {
-      const outerR = params.D / 2 - c;
-      return new THREE.TorusGeometry(outerR, r, 8, 32);
-    }
-
     return buildRectLineGeometry(params);
-  }, [params.sectionType, params.b, params.h, params.D, params.cover, params.stirrup.diameter, params.stirrup.legs, params.stirrup.legsX, params.stirrup.legsY]);
+  }, [params.b, params.h, params.cover, params.stirrup.diameter, params.stirrup.legs, params.stirrup.legsX, params.stirrup.legsY]);
 
   const { dense, sparse } = useMemo(
     () => computeFullStirrupYs(params, derived),
-    [params.Hn, params.stirrup.spacingDense, derived.denseStirrupYs, derived.sparseStirrupYs],
+    [params.Hn, params.floors, params.stirrup.spacingDense, derived.denseStirrupYs, derived.sparseStirrupYs],
   );
 
   const selectedKey = useSelectionStore((s) => s.selectedKey);
   const pickStirrup = () => {
-    if (params.sectionType === 'circle') {
-      const ds = params.stirrup.diameter;
-      const perimeter = Math.PI * (params.D - 2 * params.cover - ds);
-      useSelectionStore.getState().select(
-        straightBarCutShape(Math.round(perimeter + 2 * stirrupHookStraight(ds)), {
-          mark: '柱圆箍筋', grade: params.stirrup.grade, diameter: ds, note: '圆形箍筋展开长度',
-        }),
-        'col-stirrup',
-      );
-      return;
-    }
     const ds = params.stirrup.diameter;
     const width = params.b - 2 * params.cover - ds;
     const height = params.h - 2 * params.cover - ds;
@@ -345,9 +340,10 @@ function ColumnStirrups({ params, derived, show }: { params: ColumnParams; deriv
   );
 }
 
-// ─── 框架梁 — 柱上下两端，X 和 Z 两个方向 ───────────────
+// ─── 框架梁 — 柱每层楼面，X 和 Z 两个方向 ───────────────
 function ColumnBeams({ params }: { params: ColumnParams }) {
   const beams = useMemo(() => {
+    const floors = params.floors ?? 1;
     const colHalfB = params.b / 2;
     const colHalfH = params.h / 2;
     const beamLen = BEAM_PROJECTION;
@@ -359,24 +355,18 @@ function ColumnBeams({ params }: { params: ColumnParams }) {
       result.push({ geo: g, color });
     }
 
-    // 底部 (y=0): 梁底面在 y=0，向上 BEAM_HEIGHT
-    const bottomCenterY = BEAM_HEIGHT / 2;
+    for (let f = 0; f <= floors; f++) {
+      const floorY = f * params.Hn;
+      const centerY = floorY + BEAM_HEIGHT / 2;
 
-    addBeam(-colHalfB - beamLen / 2, bottomCenterY, 0, beamLen, BEAM_HEIGHT, BEAM_WIDTH, '#8a9a6e');
-    addBeam(colHalfB + beamLen / 2, bottomCenterY, 0, beamLen, BEAM_HEIGHT, BEAM_WIDTH, '#8a9a6e');
-    addBeam(0, bottomCenterY, -colHalfH - beamLen / 2, BEAM_WIDTH, BEAM_HEIGHT, beamLen, '#6e9a8a');
-    addBeam(0, bottomCenterY, colHalfH + beamLen / 2, BEAM_WIDTH, BEAM_HEIGHT, beamLen, '#6e9a8a');
-
-    // 顶部 (y=Hn): 梁底面在 y=Hn，向上 BEAM_HEIGHT
-    const topCenterY = params.Hn + BEAM_HEIGHT / 2;
-
-    addBeam(-colHalfB - beamLen / 2, topCenterY, 0, beamLen, BEAM_HEIGHT, BEAM_WIDTH, '#8a9a6e');
-    addBeam(colHalfB + beamLen / 2, topCenterY, 0, beamLen, BEAM_HEIGHT, BEAM_WIDTH, '#8a9a6e');
-    addBeam(0, topCenterY, -colHalfH - beamLen / 2, BEAM_WIDTH, BEAM_HEIGHT, beamLen, '#6e9a8a');
-    addBeam(0, topCenterY, colHalfH + beamLen / 2, BEAM_WIDTH, BEAM_HEIGHT, beamLen, '#6e9a8a');
+      addBeam(-colHalfB - beamLen / 2, centerY, 0, beamLen, BEAM_HEIGHT, BEAM_WIDTH, '#8a9a6e');
+      addBeam(colHalfB + beamLen / 2, centerY, 0, beamLen, BEAM_HEIGHT, BEAM_WIDTH, '#8a9a6e');
+      addBeam(0, centerY, -colHalfH - beamLen / 2, BEAM_WIDTH, BEAM_HEIGHT, beamLen, '#6e9a8a');
+      addBeam(0, centerY, colHalfH + beamLen / 2, BEAM_WIDTH, BEAM_HEIGHT, beamLen, '#6e9a8a');
+    }
 
     return result;
-  }, [params.b, params.h, params.Hn]);
+  }, [params.b, params.h, params.Hn, params.floors]);
 
   return (
     <group>
@@ -392,6 +382,81 @@ function ColumnBeams({ params }: { params: ColumnParams }) {
           />
         </mesh>
       ))}
+    </group>
+  );
+}
+
+// ─── 轴线 ─────────────────────────────────────────────────
+/** 底层柱两个方向中心的参考轴线，上层截面变化时提供位置参照 */
+function ColumnAxes({ params }: { params: ColumnParams }) {
+  const Hn = params.Hn;
+  const halfB = params.b / 2;
+  const halfH = params.h / 2;
+  const ext = 250;
+  const axColor = '#4dd0e1';
+
+  type Seg = { key: string; pts: [[number, number, number], [number, number, number]] };
+  const segments: Seg[] = [
+    // 底层底部 (y=0) 的十字
+    { key: 'b0', pts: [[-halfB - ext, 0, 0], [halfB + ext, 0, 0]] },
+    { key: 'h0', pts: [[0, 0, -halfH - ext], [0, 0, halfH + ext]] },
+    // 底层顶部 (y=Hn) 的十字
+    { key: 'b1', pts: [[-halfB - ext, Hn, 0], [halfB + ext, Hn, 0]] },
+    { key: 'h1', pts: [[0, Hn, -halfH - ext], [0, Hn, halfH + ext]] },
+    // 四根竖向连接线
+    { key: 'v1', pts: [[-halfB - ext, 0, 0], [-halfB - ext, Hn, 0]] },
+    { key: 'v2', pts: [[halfB + ext, 0, 0], [halfB + ext, Hn, 0]] },
+    { key: 'v3', pts: [[0, 0, -halfH - ext], [0, Hn, -halfH - ext]] },
+    { key: 'v4', pts: [[0, 0, halfH + ext], [0, Hn, halfH + ext]] },
+  ];
+
+  return (
+    <group>
+      {segments.map((seg) => (
+        <Line
+          key={seg.key}
+          points={seg.pts}
+          color={axColor}
+          lineWidth={1}
+          dashed
+          dashSize={5}
+          gapSize={4}
+        />
+      ))}
+    </group>
+  );
+}
+
+// ─── 柱剖切面 ──────────────────────────────────────────────
+/** 水平剖切面，跟随 slider 位置移动 */
+function ColumnSectionCutPlane({ params }: { params: ColumnParams }) {
+  const view = useColumnStore((s) => s.view);
+  if (!view.showSectionCut) return null;
+
+  const floors = params.floors ?? 1;
+  const totalH = colTotalH(params.Hn, floors);
+  const yPos = view.sectionCutY * totalH + COL_BOTTOM;
+  const planeW = params.b * 1.4;
+  const planeH = params.h * 1.4;
+
+  return (
+    <group position={[0, yPos, 0]}>
+      {/* Semi-transparent cutting plane */}
+      <mesh rotation={[Math.PI / 2, 0, 0]}>
+        <planeGeometry args={[planeW, planeH]} />
+        <meshBasicMaterial
+          color="#00daf3"
+          transparent
+          opacity={0.15}
+          side={THREE.DoubleSide}
+          depthWrite={false}
+        />
+      </mesh>
+      {/* Plane border outline */}
+      <lineSegments rotation={[Math.PI / 2, 0, 0]}>
+        <edgesGeometry args={[new THREE.PlaneGeometry(planeW, planeH)]} />
+        <lineBasicMaterial color="#00daf3" opacity={0.6} transparent />
+      </lineSegments>
     </group>
   );
 }
@@ -455,6 +520,7 @@ function CameraController({ center, camDist }: { center: [number, number, number
 export function ColumnScene() {
   const params = useColumnStore((s) => s.params);
   const view = useColumnStore((s) => s.view);
+  const floors = params.floors ?? 1;
   const derived = useMemo(() => deriveColumn(params), [params]);
 
   // 参数/构件变化时清除选中，避免陈旧下料标注
@@ -462,8 +528,8 @@ export function ColumnScene() {
     useSelectionStore.getState().clear();
   }, [params]);
 
-  const totalH = colTotalH(params.Hn);
-  const cy = colCenterY(params.Hn);
+  const totalH = colTotalH(params.Hn, floors);
+  const cy = colCenterY(params.Hn, floors);
   const camDist = Math.max(totalH * 1.5, 4000);
   const center: [number, number, number] = [0, cy, 0];
 
@@ -485,6 +551,8 @@ export function ColumnScene() {
       <ColumnConcrete params={params} show={view.showConcrete} />
       <ColumnLongBars params={params} derived={derived} show={view.showLongitudinal} />
       <ColumnStirrups params={params} derived={derived} show={view.showStirrups} />
+      <ColumnAxes params={params} />
+      <ColumnSectionCutPlane params={params} />
 
       <Grid
         position={[0, 0, 0]}

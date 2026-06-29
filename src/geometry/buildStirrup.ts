@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { BeamParams } from '../domain/kl/types';
-import { stirrupHookStraight } from '../domain/codes/22G101';
-import { buildFreecadStirrupGeometry } from './freecadStirrup';
+import { stirrupHookStraight } from '../domain/kl/codes/22G101';
+import { buildFreecadStirrupGeometry } from './beam/freecadStirrup';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 /**

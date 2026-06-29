@@ -1,5 +1,5 @@
 import type { BeamParams, ConcreteGrade, RebarGrade, SeismicLevel } from '../../domain/kl/types';
-import { densifiedZoneLength, laE } from '../../domain/codes/22G101';
+import { densifiedZoneLength, laE } from '../../domain/kl/codes/22G101';
 import { maxTopBarsPerRow, maxBarsPerRow } from '../../domain/codes/maxBarsPerRow';
 
 export type CopilotCommandResult = {

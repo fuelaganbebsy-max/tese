@@ -1,4 +1,4 @@
-import { bendAnchorStraightMin, bendAnchorVertical, densifiedZoneLength, laE } from '../codes/22G101';
+import { bendAnchorStraightMin, bendAnchorVertical, densifiedZoneLength, laE } from './codes/22G101';
 import type { BeamParams } from './types';
 import type { MemberType } from '../../config';
 

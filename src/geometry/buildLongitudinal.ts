@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 import type { BeamParams, RebarBundle, RebarGrade } from '../domain/kl/types';
 import type { Derived } from '../domain/kl/derive';
-import { tubeFromPolyline } from './rebarPath';
-import { laE, stirrupHookStraight } from '../domain/codes/22G101';
+import { tubeFromPolyline } from './beam/rebarPath';
+import { laE, stirrupHookStraight } from '../domain/kl/codes/22G101';
 import { maxTopBarsPerRow } from '../domain/codes/maxBarsPerRow';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 

@@ -1,17 +1,35 @@
 import { useColumnStore } from '../../store/columnStore';
-import type { ColumnParams, ColumnLongitudinalMode, ColumnSectionType } from '../../domain/kz/types';
+import type {
+  ColumnParams,
+  ColumnLongitudinalMode,
+  ColumnConnectionType,
+  ColumnPosition,
+  ColumnBaseType,
+} from '../../domain/kz/types';
 import { NumField } from '../fields/NumField';
 import { SelectField } from '../fields/SelectField';
 import { COMMON_DIA, STIRRUP_DIA, GRADES } from '../fields/BundleEditor';
 
-const SECTION_TYPES: { value: ColumnSectionType; label: string }[] = [
-  { value: 'rect', label: '矩形' },
-  { value: 'circle', label: '圆形' },
-];
-
 const COLUMN_LONGITUDINAL_MODES: { value: ColumnLongitudinalMode; label: string }[] = [
   { value: 'uniform', label: '全部同配' },
   { value: 'grouped', label: '分组配筋' },
+];
+
+const CONNECTION_TYPES: { value: ColumnConnectionType; label: string }[] = [
+  { value: 'tie', label: '绑扎搭接' },
+  { value: 'mechanical', label: '机械连接' },
+  { value: 'welded', label: '焊接' },
+];
+
+const POSITIONS: { value: ColumnPosition; label: string }[] = [
+  { value: 'middle', label: '中柱' },
+  { value: 'edge', label: '边柱' },
+  { value: 'corner', label: '角柱' },
+];
+
+const BASE_TYPES: { value: ColumnBaseType; label: string }[] = [
+  { value: 'foundation', label: '基础顶' },
+  { value: 'floor', label: '楼层' },
 ];
 
 export function ColumnParamContent() {
@@ -37,37 +55,13 @@ export function ColumnParamContent() {
           </span>
         </div>
 
-        {/* Section type */}
-        <div className="space-y-3">
-          <h4 className="font-body-sm text-body-sm font-medium text-on-surface font-bold">截面类型</h4>
-          <div className="flex gap-2">
-            {SECTION_TYPES.map((t) => (
-              <button
-                key={t.value}
-                onClick={() => update({ sectionType: t.value })}
-                className={`flex-1 py-2 rounded border text-body-sm font-body-sm transition-colors ${
-                  params.sectionType === t.value
-                    ? 'bg-primary-fixed-dim/15 border-primary-fixed-dim/50 text-primary-fixed-dim font-medium'
-                    : 'bg-surface-container-lowest border-white/10 text-on-surface-variant hover:bg-white/5'
-                }`}
-              >
-                {t.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
         {/* Dimensions */}
         <div className="space-y-3">
           <h4 className="font-body-sm text-body-sm font-medium text-on-surface font-bold">截面尺寸</h4>
-          {params.sectionType === 'rect' ? (
-            <div className="grid grid-cols-2 gap-3">
-              <NumField label="宽度 b" value={params.b} onChange={(v) => update({ b: v })} step={50} min={300} max={1200} unit="mm" />
-              <NumField label="高度 h" value={params.h} onChange={(v) => update({ h: v })} step={50} min={300} max={1200} unit="mm" />
-            </div>
-          ) : (
-            <NumField label="直径 D" value={params.D} onChange={(v) => update({ D: v })} step={50} min={300} max={1200} unit="mm" />
-          )}
+          <div className="grid grid-cols-2 gap-3">
+            <NumField label="宽度 b" value={params.b} onChange={(v) => update({ b: v })} step={50} min={300} max={1200} unit="mm" />
+            <NumField label="高度 h" value={params.h} onChange={(v) => update({ h: v })} step={50} min={300} max={1200} unit="mm" />
+          </div>
         </div>
 
         {/* Height */}
@@ -151,7 +145,7 @@ export function ColumnParamContent() {
             />
             <NumField label="每边根数" value={params.longitudinal.count} onChange={(v) => update({ longitudinal: { ...params.longitudinal, count: v } })} step={1} min={2} max={8} />
           </div>
-          {longitudinalMode === 'grouped' && params.sectionType === 'rect' && (
+          {longitudinalMode === 'grouped' && (
             <div className="space-y-3 pl-2 border-l-2 border-primary-fixed-dim/30">
               <div className="grid grid-cols-3 gap-2">
                 <SelectField
@@ -234,6 +228,55 @@ export function ColumnParamContent() {
               fmt={(v) => ({ rect: '矩形', well: '井字', composite: '复合' })[v]}
             />
           </div>
+        </div>
+
+        <div className="divider-gradient" />
+
+        <div className="divider-gradient" />
+
+        {/* Connection & anchorage */}
+        <div className="space-y-3">
+          <h4 className="font-body-sm text-body-sm font-medium text-on-surface font-bold">连接与锚固</h4>
+          <div className="flex gap-2">
+            {CONNECTION_TYPES.map((t) => (
+              <button
+                key={t.value}
+                onClick={() => update({ connectionType: t.value })}
+                className={`flex-1 py-1.5 rounded border text-[11px] font-mono transition-colors ${
+                  (params.connectionType ?? 'tie') === t.value
+                    ? 'bg-primary-fixed-dim/15 border-primary-fixed-dim/50 text-primary-fixed-dim font-medium'
+                    : 'bg-surface-container-lowest border-white/10 text-on-surface-variant hover:bg-white/5'
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <SelectField
+              label="柱位置"
+              value={params.position ?? 'middle'}
+              options={POSITIONS.map((p) => p.value)}
+              onChange={(v) => update({ position: v as ColumnPosition })}
+              fmt={(v) => POSITIONS.find((p) => p.value === v)?.label ?? String(v)}
+            />
+            <SelectField
+              label="柱根"
+              value={params.baseType ?? 'foundation'}
+              options={BASE_TYPES.map((p) => p.value)}
+              onChange={(v) => update({ baseType: v as ColumnBaseType })}
+              fmt={(v) => BASE_TYPES.find((p) => p.value === v)?.label ?? String(v)}
+            />
+          </div>
+          {(params.connectionType ?? 'tie') === 'tie' && (
+            <SelectField
+              label="搭接接头面积百分率"
+              value={params.lapRatio ?? 50}
+              options={[25, 50, 100]}
+              onChange={(v) => update({ lapRatio: v as 25 | 50 | 100 })}
+              fmt={(v) => `≤${v}%  (ζl=${v <= 25 ? 1.2 : v <= 50 ? 1.4 : 1.6})`}
+            />
+          )}
         </div>
 
         <button className="mt-2 w-full py-2 bg-surface-container border border-primary-fixed-dim/30 text-primary-fixed-dim font-body-sm text-body-sm rounded hover:bg-primary-fixed-dim hover:text-on-primary transition-colors duration-200">
