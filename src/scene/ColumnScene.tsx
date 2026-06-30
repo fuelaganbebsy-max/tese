@@ -1,6 +1,6 @@
 import { Canvas, useThree } from '@react-three/fiber';
 import type { ThreeEvent } from '@react-three/fiber';
-import { OrbitControls, GizmoHelper, GizmoViewport, Grid, Environment, Line } from '@react-three/drei';
+import { OrbitControls, GizmoHelper, GizmoViewport, Grid, Environment, Line, Html } from '@react-three/drei';
 import { useMemo, useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { deriveColumn } from '../domain/kz/derive';
@@ -156,16 +156,19 @@ function ColumnLongBars({ params, derived, show }: { params: ColumnParams; deriv
  * 外箍筋采用 FreeCAD 算法 (135° 弯钩 + 圆角 + 法向偏移)；内肢以独立的矩形箍筋在 ColumnStirrups 中生成。
  */
 function buildRectLineGeometry(params: ColumnParams) {
-  const c = params.cover + params.stirrup.diameter / 2;
-  const halfW = (params.b - 2 * c) / 2;
-  const halfH = (params.h - 2 * c) / 2;
   const d = params.stirrup.diameter;
+  // 与剖切面 SVG 一致：箍筋中心线 = 纵筋外缘 + gap + 箍筋半径
+  const barR = 25 / 2;
+  const svgGapPx = 2;
+  const svgScale = (200 - 28) / Math.max(params.b, params.h);
+  const gap = svgGapPx / svgScale;
+  const barCenter = params.b / 2 - params.cover - d - gap - barR;
+  const cl = barCenter + barR + gap + d / 2;
   const bentFactor = stirrupHookStraight(d) / d;
 
-  // 外箍筋 (中心线尺寸 = 2·half)
   return buildFreecadStirrupGeometry({
-    width: halfW * 2,
-    height: halfH * 2,
+    width: cl * 2,
+    height: cl * 2,
     diameter: d,
     bentAngle: 135,
     bentFactor,
@@ -248,6 +251,7 @@ function ColumnStirrupInstances({ geometry, ys, color, onPick, active, rotateCor
       ref.current!.setMatrixAt(i, dummy.matrix);
     });
     ref.current.instanceMatrix.needsUpdate = true;
+    ref.current.computeBoundingSphere();
   }, [ys, rotateCorners, yOffset]);
 
   if (!geometry || ys.length === 0) return null;
@@ -266,6 +270,7 @@ function ColumnStirrupInstances({ geometry, ys, color, onPick, active, rotateCor
         metalness={0.65}
         roughness={0.4}
         envMapIntensity={1.0}
+        depthWrite={false}
       />
     </instancedMesh>
   );
@@ -364,9 +369,13 @@ function ColumnStirrups({ params, derived, show }: { params: ColumnParams; deriv
       const minY = Math.min(...bars.map((p) => p.y));
       const maxY = Math.max(...bars.map((p) => p.y));
       const barR = Math.max(...bars.map((p) => p.bundle.diameter)) / 2;
-      const gap = 1;
-      const w = maxX - minX + 2 * barR + 2 * gap;
-      const h = maxY - minY + 2 * barR + 2 * gap;
+      // 与剖切面 SVG 一致：2px 间隙折算为 mm
+      const svgGapPx = 2;
+      const svgScale = (200 - 28) / Math.max(params.b, params.h);
+      const gap = svgGapPx / svgScale;
+      // 箍筋中心线位置 = 纵筋外缘 + gap + 箍筋半径
+      const w = 2 * (maxX + barR + gap + d / 2);
+      const h = 2 * (maxY + barR + gap + d / 2);
       if (w < 10 || h < 10) return;
       result.push({
         geo: buildFreecadStirrupGeometry({ width: w, height: h, diameter: d, bentAngle: 135, bentFactor, rounding: 2 }),
@@ -424,8 +433,9 @@ function ColumnStirrups({ params, derived, show }: { params: ColumnParams; deriv
           key={i}
           geometry={item.geo}
           ys={[...dense, ...sparse, ...core]}
-          color="#78909c"
+          color="#546e7a"
           rotateCorners
+          yOffset={0.5}
           onPick={() => pickInner(item.kind, item.w, item.h)}
           active={selectedKey === `col-stirrup-${item.kind}`}
         />
@@ -480,43 +490,88 @@ function ColumnBeams({ params }: { params: ColumnParams }) {
   );
 }
 
-// ─── 轴线 ─────────────────────────────────────────────────
-/** 底层柱两个方向中心的参考轴线，上层截面变化时提供位置参照 */
+// ─── 柱底轴线（1轴沿X垂直于b边，A轴沿Z垂直于h边） ──────
+/** 在柱最底侧 XZ 水平面添加十字相交的轴线，1轴沿X（垂直于b边），A轴沿Z（垂直于h边） */
 function ColumnAxes({ params }: { params: ColumnParams }) {
-  const Hn = params.Hn;
-  const halfB = params.b / 2;
-  const halfH = params.h / 2;
-  const ext = 250;
-  const axColor = '#4dd0e1';
-
-  type Seg = { key: string; pts: [[number, number, number], [number, number, number]] };
-  const segments: Seg[] = [
-    // 底层底部 (y=0) 的十字
-    { key: 'b0', pts: [[-halfB - ext, 0, 0], [halfB + ext, 0, 0]] },
-    { key: 'h0', pts: [[0, 0, -halfH - ext], [0, 0, halfH + ext]] },
-    // 底层顶部 (y=Hn) 的十字
-    { key: 'b1', pts: [[-halfB - ext, Hn, 0], [halfB + ext, Hn, 0]] },
-    { key: 'h1', pts: [[0, Hn, -halfH - ext], [0, Hn, halfH + ext]] },
-    // 四根竖向连接线
-    { key: 'v1', pts: [[-halfB - ext, 0, 0], [-halfB - ext, Hn, 0]] },
-    { key: 'v2', pts: [[halfB + ext, 0, 0], [halfB + ext, Hn, 0]] },
-    { key: 'v3', pts: [[0, 0, -halfH - ext], [0, Hn, -halfH - ext]] },
-    { key: 'v4', pts: [[0, 0, halfH + ext], [0, Hn, halfH + ext]] },
-  ];
+  const extent = Math.max(params.b, params.h) * 1.2;
+  const y = COL_BOTTOM;
+  const axisColor = '#4dd0e1';
+  const labelStyle: React.CSSProperties = {
+    color: '#4dd0e1',
+    fontSize: '14px',
+    fontWeight: 'bold',
+    fontFamily: 'sans-serif',
+    textShadow: '0 0 4px #000, 0 0 8px #000',
+    pointerEvents: 'none',
+    userSelect: 'none',
+    lineHeight: '24px',
+    textAlign: 'center' as const,
+    width: '24px',
+    height: '24px',
+    border: `1.5px solid ${axisColor}`,
+    borderRadius: '50%',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    background: 'rgba(0,0,0,0.5)',
+  };
 
   return (
     <group>
-      {segments.map((seg) => (
-        <Line
-          key={seg.key}
-          points={seg.pts}
-          color={axColor}
-          lineWidth={1}
-          dashed
-          dashSize={5}
-          gapSize={4}
-        />
-      ))}
+      {/* 1轴（沿X方向，垂直于b边）*/}
+      <Line
+        points={[[-extent, y, 0], [extent, y, 0]]}
+        color={axisColor}
+        lineWidth={1}
+        dashed
+        dashSize={80}
+        gapSize={60}
+      />
+      {/* A轴（沿Z方向，垂直于h边）*/}
+      <Line
+        points={[[0, y, -extent], [0, y, extent]]}
+        color={axisColor}
+        lineWidth={1}
+        dashed
+        dashSize={80}
+        gapSize={60}
+      />
+      {/* 1轴号（正X端）*/}
+      <Html position={[extent + 30, y, 0]} center>
+        <span style={labelStyle}>1</span>
+      </Html>
+      {/* A轴号（正Z端）*/}
+      <Html position={[0, y, extent + 30]} center>
+        <span style={labelStyle}>A</span>
+      </Html>
+    </group>
+  );
+}
+
+// ─── 截面方向标注 b / h ────────────────────────────────────
+/** 在柱底外侧标注 b / h，方便转动时区分两个边 */
+function ColumnDimLabels({ params }: { params: ColumnParams }) {
+  const halfB = params.b / 2;
+  const halfH = params.h / 2;
+  const labelY = COL_BOTTOM;
+  const gap = 60;
+  const style: React.CSSProperties = {
+    color: '#b0bec5',
+    fontSize: '32px',
+    fontWeight: 'bold',
+    fontFamily: 'sans-serif',
+    textShadow: '0 0 8px #000, 0 0 16px #000',
+    pointerEvents: 'none',
+    userSelect: 'none',
+  };
+  return (
+    <group>
+      <Html position={[halfB + gap, labelY + gap * 0.5, 0]} center>
+        <span style={style}>b</span>
+      </Html>
+      <Html position={[0, labelY + gap * 0.5, halfH + gap]} center>
+        <span style={style}>h</span>
+      </Html>
     </group>
   );
 }
@@ -646,6 +701,7 @@ export function ColumnScene() {
       <ColumnLongBars params={params} derived={derived} show={view.showLongitudinal} />
       <ColumnStirrups params={params} derived={derived} show={view.showStirrups} />
       <ColumnAxes params={params} />
+      <ColumnDimLabels params={params} />
       <ColumnSectionCutPlane params={params} />
 
       <Grid

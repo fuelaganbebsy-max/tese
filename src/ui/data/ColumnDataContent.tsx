@@ -132,7 +132,8 @@ function ColumnSectionView() {
         style={{ cursor: zoom !== 1 && !expanded ? 'grab' : 'default' }}
       >
         <div style={{ transform: `scale(${zoom})`, transformOrigin: 'center center', transition: 'transform 0.05s' }}>
-        <svg width={expanded ? size.w - 32 : W} height={expanded ? size.h - 72 : H} viewBox={`0 0 ${W} ${H}`}>
+        <svg width={expanded ? size.w - 32 : W} height={expanded ? size.h - 72 : H}
+          viewBox={`${-36} -24 ${W + 64} ${H + 60}`}>
           <defs>
             <filter id="col-glow">
               <feGaussianBlur stdDeviation="1.5" result="blur" />
@@ -141,13 +142,18 @@ function ColumnSectionView() {
           </defs>
           {/* 混凝土截面轮廓 */}
           <rect x={innerPad} y={innerPad} width={W - innerPad * 2} height={H - innerPad * 2} fill="rgba(59,73,76,0.1)" stroke="rgba(59,73,76,0.6)" strokeWidth={2} />
-          {/* 轴线参考十字 */}
-          <line x1={innerPad} y1={H/2} x2={W - innerPad} y2={H/2} stroke="#4dd0e1" strokeWidth={1} strokeDasharray="5,4" opacity={0.7} />
-          <line x1={W/2} y1={innerPad} x2={W/2} y2={H - innerPad} stroke="#4dd0e1" strokeWidth={1} strokeDasharray="5,4" opacity={0.7} />
-          <circle cx={innerPad + 8} cy={H/2} r={6} fill="none" stroke="#4dd0e1" strokeWidth={0.8} opacity={0.7} />
-          <text x={innerPad + 8} y={H/2 + 1.5} textAnchor="middle" dominantBaseline="central" fill="#4dd0e1" fontSize={7} opacity={0.8} fontFamily="sans-serif">①</text>
-          <circle cx={W/2} cy={innerPad + 8} r={6} fill="none" stroke="#4dd0e1" strokeWidth={0.8} opacity={0.7} />
-          <text x={W/2} y={innerPad + 8} textAnchor="middle" dominantBaseline="central" fill="#4dd0e1" fontSize={7} opacity={0.8} fontFamily="sans-serif">②</text>
+          {/* 轴线 — A轴（//b方向，垂直于h边），1轴（//h方向，垂直于b边） */}
+          <line x1={-16} y1={H/2} x2={W + 18} y2={H/2} stroke="#4dd0e1" strokeWidth={1} strokeDasharray="8,6" opacity={0.8} />
+          <line x1={W/2} y1={-18} x2={W/2} y2={H + 18} stroke="#4dd0e1" strokeWidth={1} strokeDasharray="8,6" opacity={0.8} />
+          {/* A轴号（右端外侧） */}
+          <circle cx={W + 14} cy={H/2} r={8} fill="rgba(0,0,0,0.6)" stroke="#4dd0e1" strokeWidth={1.2} opacity={0.9} />
+          <text x={W + 14} y={H/2} textAnchor="middle" dominantBaseline="central" fill="#4dd0e1" fontSize={9} fontWeight="bold" opacity={0.95} fontFamily="sans-serif">A</text>
+          {/* 1轴号（上端） */}
+          <circle cx={W/2} cy={-10} r={8} fill="rgba(0,0,0,0.6)" stroke="#4dd0e1" strokeWidth={1.2} opacity={0.9} />
+          <text x={W/2} y={-10} textAnchor="middle" dominantBaseline="central" fill="#4dd0e1" fontSize={9} fontWeight="bold" opacity={0.95} fontFamily="sans-serif">1</text>
+          {/* 截面方向 b / h 标注 — 放在柱边中间，留间距 */}
+          <text x={W/2} y={H + 36} textAnchor="middle" dominantBaseline="bottom" fill="#b0bec5" fontSize={27} fontFamily="sans-serif" fontWeight="bold">b</text>
+          <text x={innerPad - 40} y={H/2} textAnchor="start" dominantBaseline="central" fill="#b0bec5" fontSize={27} fontFamily="sans-serif" fontWeight="bold">h</text>
           {/* 外箍筋 — 圆角矩形 (skill: strokeWidth=2.5, rx=3) */}
           <rect x={sx0} y={sy0} width={sx1 - sx0} height={sy1 - sy0} fill="none" stroke="#78909c" strokeWidth={2.5} rx={3} />
           {/* 箍筋 135° 弯钩 — skill 画法：从角筋外缘+1px 出发，向截面内侧斜伸 */}

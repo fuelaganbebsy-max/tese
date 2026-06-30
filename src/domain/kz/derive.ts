@@ -104,8 +104,13 @@ function calcBarPositions(params: ColumnParams): ColumnBarPosition[] {
     mode === 'grouped' ? Math.max(0, params.hSideMidBar?.count ?? uniformMid) : uniformMid,
   );
   const maxDia = Math.max(corner.diameter, bMid.diameter, hMid.diameter);
-  const halfW = params.b / 2 - params.cover - maxDia / 2;
-  const halfH = params.h / 2 - params.cover - maxDia / 2;
+  const stirrupD = params.stirrup.diameter;
+  // 纵筋外缘与箍筋内缘间隙 = 剖切面 SVG 的 2px 折算为 mm
+  const svgGapPx = 2;
+  const svgScale = (200 - 28) / Math.max(params.b, params.h); // W=200, innerPad=14
+  const stirrupGap = svgGapPx / svgScale;
+  const halfW = params.b / 2 - params.cover - stirrupD - stirrupGap - maxDia / 2;
+  const halfH = params.h / 2 - params.cover - stirrupD - stirrupGap - maxDia / 2;
 
   // 4 角
   positions.push({ x: -halfW, y: halfH, kind: 'corner', bundle: corner });
@@ -282,9 +287,14 @@ export function defaultColumn(): ColumnParams {
     sectionType: 'rect',
     b: 600,
     h: 600,
+    topB: 600,
+    topH: 600,
     Hn: 3600,
+    upperHn: 3600,
     beamHeight: 600,
+    topBeamHeight: 600,
     floorHeight: 4200,
+    topFloorHeight: 4200,
     cover: 25,
     concrete: 'C30',
     seismic: 2,

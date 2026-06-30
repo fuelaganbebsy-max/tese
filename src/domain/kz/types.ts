@@ -44,16 +44,26 @@ export interface ColumnParams {
   id?: string;
   /** 截面类型 */
   sectionType: ColumnSectionType;
-  /** 矩形柱宽 b (mm) */
+  /** 矩形柱宽 b (mm) — 下层柱截面宽度 */
   b: number;
-  /** 矩形柱高 h (mm) */
+  /** 矩形柱高 h (mm) — 下层柱截面高度 */
   h: number;
-  /** 柱净高 Hn (mm) */
+  /** 顶层柱截面宽度 (mm) */
+  topB?: number;
+  /** 顶层柱截面高度 (mm) */
+  topH?: number;
+  /** 柱净高 Hn (mm) — 下层净高 */
   Hn: number;
-  /** 梁高 (mm) */
+  /** 上层净高 (mm) */
+  upperHn?: number;
+  /** 梁高 (mm) — 中间梁高（下层） */
   beamHeight: number;
-  /** 层高 (mm) */
+  /** 柱顶梁高 (mm) — 上层 */
+  topBeamHeight?: number;
+  /** 层高 (mm) — 下层层高 */
   floorHeight: number;
+  /** 顶层层高 (mm) */
+  topFloorHeight?: number;
   /** 保护层厚度 c (mm) */
   cover: number;
   concrete: ConcreteGrade;

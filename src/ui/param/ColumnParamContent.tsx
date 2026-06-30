@@ -2,9 +2,6 @@ import { useColumnStore } from '../../store/columnStore';
 import type {
   ColumnParams,
   ColumnLongitudinalMode,
-  ColumnConnectionType,
-  ColumnPosition,
-  ColumnBaseType,
 } from '../../domain/kz/types';
 import { NumField } from '../fields/NumField';
 import { SelectField } from '../fields/SelectField';
@@ -13,23 +10,6 @@ import { COMMON_DIA, STIRRUP_DIA, GRADES } from '../fields/BundleEditor';
 const COLUMN_LONGITUDINAL_MODES: { value: ColumnLongitudinalMode; label: string }[] = [
   { value: 'uniform', label: '全部同配' },
   { value: 'grouped', label: '分组配筋' },
-];
-
-const CONNECTION_TYPES: { value: ColumnConnectionType; label: string }[] = [
-  { value: 'tie', label: '绑扎搭接' },
-  { value: 'mechanical', label: '机械连接' },
-  { value: 'welded', label: '焊接' },
-];
-
-const POSITIONS: { value: ColumnPosition; label: string }[] = [
-  { value: 'middle', label: '中柱' },
-  { value: 'edge', label: '边柱' },
-  { value: 'corner', label: '角柱' },
-];
-
-const BASE_TYPES: { value: ColumnBaseType; label: string }[] = [
-  { value: 'foundation', label: '基础顶' },
-  { value: 'floor', label: '楼层' },
 ];
 
 export function ColumnParamContent() {
@@ -55,27 +35,110 @@ export function ColumnParamContent() {
           </span>
         </div>
 
-        {/* Dimensions */}
-        <div className="space-y-3">
-          <h4 className="font-body-sm text-body-sm font-medium text-on-surface font-bold">截面尺寸</h4>
-          <div className="grid grid-cols-2 gap-3">
-            <NumField label="宽度 b" value={params.b} onChange={(v) => update({ b: v })} step={50} min={300} max={1200} unit="mm" />
-            <NumField label="高度 h" value={params.h} onChange={(v) => update({ h: v })} step={50} min={300} max={1200} unit="mm" />
+        {/* ── 上层参数 ── */}
+        <div className="rounded-xl border border-white/5 bg-surface-container-lowest/40 overflow-hidden">
+          <div className="px-4 py-2.5 bg-primary-fixed-dim/10 border-b border-white/5 flex items-center gap-2">
+            <span className="material-symbols-outlined text-[16px] text-primary-fixed-dim">arrow_upward</span>
+            <h4 className="font-body-sm text-body-sm font-semibold text-on-surface font-bold">上层参数</h4>
+          </div>
+          <div className="p-4 space-y-3">
+            <div className="flex flex-row gap-3">
+              <div className="flex-1 flex items-center gap-2 bg-surface-container-lowest border border-white/10 rounded-lg px-3 py-1.5">
+                <label className="font-body-sm text-[11px] text-on-surface-variant whitespace-nowrap">顶层层高</label>
+                <input type="number" value={params.topFloorHeight ?? params.floorHeight}
+                  onChange={(v) => { const bh = params.topBeamHeight ?? params.beamHeight; const val = Number((v.target as HTMLInputElement).value); update({ topFloorHeight: val, upperHn: val - bh }); }}
+                  step={100} min={2000} max={8000}
+                  className="flex-1 bg-surface-container-highest border border-white/10 rounded px-2 py-1 font-label-numeric text-label-numeric text-on-surface text-right outline-none focus:border-primary-fixed-dim font-mono min-w-0" />
+                <span className="font-label-numeric text-[11px] text-on-surface-variant font-mono">mm</span>
+              </div>
+              <div className="flex-1 flex items-center gap-2 bg-surface-container-lowest border border-white/10 rounded-lg px-3 py-1.5">
+                <label className="font-body-sm text-[11px] text-on-surface-variant whitespace-nowrap">柱顶梁高</label>
+                <input type="number" value={params.topBeamHeight ?? params.beamHeight}
+                  onChange={(v) => { const fh = params.topFloorHeight ?? params.floorHeight; const val = Number((v.target as HTMLInputElement).value); update({ topBeamHeight: val, upperHn: fh - val }); }}
+                  step={50} min={300} max={1200}
+                  className="flex-1 bg-surface-container-highest border border-white/10 rounded px-2 py-1 font-label-numeric text-label-numeric text-on-surface text-right outline-none focus:border-primary-fixed-dim font-mono min-w-0" />
+                <span className="font-label-numeric text-[11px] text-on-surface-variant font-mono">mm</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 py-1.5 px-3 rounded-lg bg-surface-container-highest/30 border border-white/5">
+              <span className="text-[11px] text-on-surface-variant">上层净高</span>
+              <span className="ml-auto font-label-numeric text-label-numeric text-primary-fixed-dim font-mono font-bold">{params.upperHn ?? params.Hn} mm</span>
+              <span className="text-[10px] text-on-surface-variant/50">= 层高 − 梁高</span>
+            </div>
+            {/* 顶层柱截面 — 可视化 b × h */}
+            <div className="flex items-center gap-2 bg-surface-container-lowest border border-white/10 rounded-lg px-3 py-1.5">
+              <label className="font-body-sm text-[11px] text-on-surface-variant whitespace-nowrap">顶层柱截面</label>
+              <div className="flex-1 flex items-center gap-1 bg-surface-container-highest border border-white/10 rounded px-2 py-1">
+                <span className="text-[10px] text-primary-fixed-dim font-mono font-bold shrink-0">b</span>
+                <input type="number" value={params.topB ?? params.b}
+                  onChange={(e) => update({ topB: Number(e.target.value) })}
+                  step={50} min={300} max={1200}
+                  className="flex-1 w-0 bg-transparent font-label-numeric text-label-numeric text-on-surface text-right outline-none font-mono" />
+                <span className="text-[10px] text-on-surface-variant/50 font-mono shrink-0">mm</span>
+              </div>
+              <span className="text-on-surface-variant font-bold shrink-0">×</span>
+              <div className="flex-1 flex items-center gap-1 bg-surface-container-highest border border-white/10 rounded px-2 py-1">
+                <span className="text-[10px] text-primary-fixed-dim font-mono font-bold shrink-0">h</span>
+                <input type="number" value={params.topH ?? params.h}
+                  onChange={(e) => update({ topH: Number(e.target.value) })}
+                  step={50} min={300} max={1200}
+                  className="flex-1 w-0 bg-transparent font-label-numeric text-label-numeric text-on-surface text-right outline-none font-mono" />
+                <span className="text-[10px] text-on-surface-variant/50 font-mono shrink-0">mm</span>
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* Height */}
-        <div className="space-y-3">
-          <h4 className="font-body-sm text-body-sm font-medium text-on-surface font-bold">楼层参数</h4>
-          <div className="grid grid-cols-2 gap-3">
-            <NumField label="层高" value={params.floorHeight} onChange={(v) => update({ floorHeight: v, Hn: v - params.beamHeight })} step={100} min={2000} max={8000} unit="mm" />
-            <NumField label="梁高" value={params.beamHeight} onChange={(v) => update({ beamHeight: v, Hn: params.floorHeight - v })} step={50} min={300} max={1200} unit="mm" />
+        {/* ── 下层参数 ── */}
+        <div className="rounded-xl border border-white/5 bg-surface-container-lowest/40 overflow-hidden">
+          <div className="px-4 py-2.5 bg-primary-fixed-dim/10 border-b border-white/5 flex items-center gap-2">
+            <span className="material-symbols-outlined text-[16px] text-primary-fixed-dim">arrow_downward</span>
+            <h4 className="font-body-sm text-body-sm font-semibold text-on-surface font-bold">下层参数</h4>
           </div>
-          <div className="flex flex-col gap-1">
-            <label className="font-body-sm text-[11px] text-on-surface-variant">净高 Hn</label>
-            <div className="w-full bg-surface-container-lowest border border-white/10 rounded px-3 py-1.5 font-label-numeric text-label-numeric text-on-surface/60 text-right font-mono pr-10 relative">
-              {params.Hn}
-              <span className="absolute right-3 top-1/2 -translate-y-1/2 font-label-numeric text-[11px] text-on-surface-variant pointer-events-none font-mono">mm</span>
+          <div className="p-4 space-y-3">
+            <div className="flex flex-row gap-3">
+              <div className="flex-1 flex items-center gap-2 bg-surface-container-lowest border border-white/10 rounded-lg px-3 py-1.5">
+                <label className="font-body-sm text-[11px] text-on-surface-variant whitespace-nowrap">下层层高</label>
+                <input type="number" value={params.floorHeight}
+                  onChange={(v) => { const val = Number((v.target as HTMLInputElement).value); update({ floorHeight: val, Hn: val - params.beamHeight }); }}
+                  step={100} min={2000} max={8000}
+                  className="flex-1 bg-surface-container-highest border border-white/10 rounded px-2 py-1 font-label-numeric text-label-numeric text-on-surface text-right outline-none focus:border-primary-fixed-dim font-mono min-w-0" />
+                <span className="font-label-numeric text-[11px] text-on-surface-variant font-mono">mm</span>
+              </div>
+              <div className="flex-1 flex items-center gap-2 bg-surface-container-lowest border border-white/10 rounded-lg px-3 py-1.5">
+                <label className="font-body-sm text-[11px] text-on-surface-variant whitespace-nowrap">中间梁高</label>
+                <input type="number" value={params.beamHeight}
+                  onChange={(v) => { const val = Number((v.target as HTMLInputElement).value); update({ beamHeight: val, Hn: params.floorHeight - val }); }}
+                  step={50} min={300} max={1200}
+                  className="flex-1 bg-surface-container-highest border border-white/10 rounded px-2 py-1 font-label-numeric text-label-numeric text-on-surface text-right outline-none focus:border-primary-fixed-dim font-mono min-w-0" />
+                <span className="font-label-numeric text-[11px] text-on-surface-variant font-mono">mm</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 py-1.5 px-3 rounded-lg bg-surface-container-highest/30 border border-white/5">
+              <span className="text-[11px] text-on-surface-variant">下层净高</span>
+              <span className="ml-auto font-label-numeric text-label-numeric text-primary-fixed-dim font-mono font-bold">{params.Hn} mm</span>
+              <span className="text-[10px] text-on-surface-variant/50">= 层高 − 梁高</span>
+            </div>
+            {/* 下层柱截面 — 可视化 b × h */}
+            <div className="flex items-center gap-2 bg-surface-container-lowest border border-white/10 rounded-lg px-3 py-1.5">
+              <label className="font-body-sm text-[11px] text-on-surface-variant whitespace-nowrap">下层柱截面</label>
+              <div className="flex-1 flex items-center gap-1 bg-surface-container-highest border border-white/10 rounded px-2 py-1">
+                <span className="text-[10px] text-primary-fixed-dim font-mono font-bold shrink-0">b</span>
+                <input type="number" value={params.b}
+                  onChange={(e) => update({ b: Number(e.target.value) })}
+                  step={50} min={300} max={1200}
+                  className="flex-1 w-0 bg-transparent font-label-numeric text-label-numeric text-on-surface text-right outline-none font-mono" />
+                <span className="text-[10px] text-on-surface-variant/50 font-mono shrink-0">mm</span>
+              </div>
+              <span className="text-on-surface-variant font-bold shrink-0">×</span>
+              <div className="flex-1 flex items-center gap-1 bg-surface-container-highest border border-white/10 rounded px-2 py-1">
+                <span className="text-[10px] text-primary-fixed-dim font-mono font-bold shrink-0">h</span>
+                <input type="number" value={params.h}
+                  onChange={(e) => update({ h: Number(e.target.value) })}
+                  step={50} min={300} max={1200}
+                  className="flex-1 w-0 bg-transparent font-label-numeric text-label-numeric text-on-surface text-right outline-none font-mono" />
+                <span className="text-[10px] text-on-surface-variant/50 font-mono shrink-0">mm</span>
+              </div>
             </div>
           </div>
         </div>
@@ -85,28 +148,50 @@ export function ColumnParamContent() {
         {/* Material */}
         <div className="space-y-3">
           <h4 className="font-body-sm text-body-sm font-medium text-on-surface font-bold">材质</h4>
-          <div className="grid grid-cols-2 gap-3">
-            <SelectField
-              label="混凝土"
-              value={params.concrete}
-              options={['C25', 'C30', 'C35', 'C40', 'C45', 'C50'] as const}
-              onChange={(v) => update({ concrete: v })}
-            />
-            <SelectField
-              label="主筋等级"
-              value={params.longitudinal.grade}
-              options={GRADES}
-              onChange={(v) => update({ longitudinal: { ...params.longitudinal, grade: v } })}
-            />
+          <div className="flex gap-2">
+            <div className="flex-1 flex items-center gap-1.5 bg-surface-container-lowest border border-white/10 rounded-lg px-2 py-1">
+              <span className="text-[11px] text-on-surface-variant whitespace-nowrap">混凝土</span>
+              <select
+                className="flex-1 bg-surface-container-highest border border-white/10 rounded px-1.5 py-0.5 font-label-numeric text-label-numeric text-on-surface outline-none focus:border-primary-fixed-dim font-mono"
+                value={params.concrete}
+                onChange={(e) => update({ concrete: e.target.value as any })}
+              >
+                {['C25', 'C30', 'C35', 'C40', 'C45', 'C50'].map((v) => <option key={v} value={v}>{v}</option>)}
+              </select>
+            </div>
+            <div className="flex-1 flex items-center gap-1.5 bg-surface-container-lowest border border-white/10 rounded-lg px-2 py-1">
+              <span className="text-[11px] text-on-surface-variant whitespace-nowrap">主筋等级</span>
+              <select
+                className="flex-1 bg-surface-container-highest border border-white/10 rounded px-1.5 py-0.5 font-label-numeric text-label-numeric text-on-surface outline-none focus:border-primary-fixed-dim font-mono"
+                value={params.longitudinal.grade}
+                onChange={(e) => update({ longitudinal: { ...params.longitudinal, grade: e.target.value as any } })}
+              >
+                {GRADES.map((g) => <option key={g} value={g}>{g}</option>)}
+              </select>
+            </div>
           </div>
-          <SelectField
-            label="抗震等级"
-            value={params.seismic}
-            options={[1, 2, 3, 4] as const}
-            onChange={(v) => update({ seismic: v })}
-            fmt={(v) => `抗震${['一', '二', '三', '四'][(v as number) - 1]}级（等级 ${['Ⅰ', 'Ⅱ', 'Ⅲ', 'Ⅳ'][(v as number) - 1]}）`}
-          />
-          <SelectField label="保护层厚度 c" value={params.cover} options={[20, 25, 30, 35, 40, 50]} onChange={(v) => update({ cover: v })} fmt={(v) => `${v} mm`} />
+          <div className="flex items-center gap-1.5 bg-surface-container-lowest border border-white/10 rounded-lg px-2 py-1">
+            <span className="text-[11px] text-on-surface-variant whitespace-nowrap">抗震等级</span>
+            <select
+              className="flex-1 bg-surface-container-highest border border-white/10 rounded px-1.5 py-0.5 font-label-numeric text-label-numeric text-on-surface outline-none focus:border-primary-fixed-dim font-mono"
+              value={params.seismic}
+              onChange={(e) => update({ seismic: Number(e.target.value) as 1 | 2 | 3 | 4 })}
+            >
+              {[1, 2, 3, 4].map((v) => (
+                <option key={v} value={v}>抗震{['一', '二', '三', '四'][v - 1]}级（等级 {['Ⅰ', 'Ⅱ', 'Ⅲ', 'Ⅳ'][v - 1]}）</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex items-center gap-1.5 bg-surface-container-lowest border border-white/10 rounded-lg px-2 py-1">
+            <span className="text-[11px] text-on-surface-variant whitespace-nowrap">保护层厚度 c</span>
+            <select
+              className="flex-1 bg-surface-container-highest border border-white/10 rounded px-1.5 py-0.5 font-label-numeric text-label-numeric text-on-surface outline-none focus:border-primary-fixed-dim font-mono"
+              value={params.cover}
+              onChange={(e) => update({ cover: Number(e.target.value) })}
+            >
+              {[20, 25, 30, 35, 40, 50].map((v) => <option key={v} value={v}>{v} mm</option>)}
+            </select>
+          </div>
         </div>
 
         <div className="divider-gradient" />
@@ -129,50 +214,73 @@ export function ColumnParamContent() {
               </button>
             ))}
           </div>
-          <div className="grid grid-cols-3 gap-2">
-            <SelectField
-              label="等级"
-              value={params.longitudinal.grade}
-              options={GRADES}
-              onChange={(v) => update({ longitudinal: { ...params.longitudinal, grade: v } })}
-            />
-            <SelectField
-              label="直径"
-              value={params.longitudinal.diameter}
-              options={COMMON_DIA as unknown as number[]}
-              onChange={(v) => update({ longitudinal: { ...params.longitudinal, diameter: v } })}
-              fmt={(v) => `⌀${v}`}
-            />
-            <NumField label="每边根数" value={params.longitudinal.count} onChange={(v) => update({ longitudinal: { ...params.longitudinal, count: v } })} step={1} min={2} max={8} />
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-1.5 bg-surface-container-lowest border border-white/10 rounded-lg px-2 py-1">
+              <span className="text-[11px] text-on-surface-variant whitespace-nowrap">等级</span>
+              <select
+                className="flex-1 bg-surface-container-highest border border-white/10 rounded px-1.5 py-0.5 font-label-numeric text-label-numeric text-on-surface outline-none focus:border-primary-fixed-dim font-mono"
+                value={params.longitudinal.grade}
+                onChange={(e) => update({ longitudinal: { ...params.longitudinal, grade: e.target.value as any } })}
+              >
+                {GRADES.map((g) => <option key={g} value={g}>{g}</option>)}
+              </select>
+            </div>
+            <div className="flex gap-2">
+              <div className="flex-1 flex items-center gap-1.5 bg-surface-container-lowest border border-white/10 rounded-lg px-2 py-1">
+                <span className="text-[11px] text-on-surface-variant whitespace-nowrap">角筋直径</span>
+                <select
+                  className="flex-1 bg-surface-container-highest border border-white/10 rounded px-1.5 py-0.5 font-label-numeric text-label-numeric text-on-surface outline-none focus:border-primary-fixed-dim font-mono"
+                  value={cornerBar.diameter}
+                  onChange={(e) => update({ cornerBar: { ...cornerBar, diameter: Number(e.target.value), grade: params.longitudinal.grade, count: 4 } })}
+                >
+                  {(COMMON_DIA as unknown as number[]).map((d) => <option key={d} value={d}>⌀{d}</option>)}
+                </select>
+              </div>
+              <div className="flex-1 flex items-center gap-1.5 bg-surface-container-lowest border border-white/10 rounded-lg px-2 py-1">
+                <span className="text-[11px] text-on-surface-variant whitespace-nowrap">钢筋数量</span>
+                <input type="number" value={params.longitudinal.count}
+                  onChange={(e) => update({ longitudinal: { ...params.longitudinal, count: Number(e.target.value) } })}
+                  step={1} min={2} max={8}
+                  className="flex-1 bg-surface-container-highest border border-white/10 rounded px-1.5 py-0.5 font-label-numeric text-label-numeric text-on-surface text-right outline-none focus:border-primary-fixed-dim font-mono" />
+                <span className="text-[10px] text-on-surface-variant/50 font-mono">根</span>
+              </div>
+            </div>
           </div>
           {longitudinalMode === 'grouped' && (
             <div className="space-y-3 pl-2 border-l-2 border-primary-fixed-dim/30">
-              <div className="grid grid-cols-3 gap-2">
-                <SelectField
-                  label="角筋直径"
-                  value={cornerBar.diameter}
-                  options={COMMON_DIA as unknown as number[]}
-                  onChange={(v) => update({ cornerBar: { ...cornerBar, diameter: v, grade: params.longitudinal.grade, count: 4 } })}
-                  fmt={(v) => `⌀${v}`}
-                />
-                <NumField label="b边中部/边" value={bSideMidBar.count} onChange={(v) => update({ bSideMidBar: { ...bSideMidBar, grade: params.longitudinal.grade, count: v } })} step={1} min={0} max={8} />
-                <SelectField
-                  label="b边直径"
-                  value={bSideMidBar.diameter}
-                  options={COMMON_DIA as unknown as number[]}
-                  onChange={(v) => update({ bSideMidBar: { ...bSideMidBar, grade: params.longitudinal.grade, diameter: v } })}
-                  fmt={(v) => `⌀${v}`}
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <NumField label="h边中部/边" value={hSideMidBar.count} onChange={(v) => update({ hSideMidBar: { ...hSideMidBar, grade: params.longitudinal.grade, count: v } })} step={1} min={0} max={8} />
-                <SelectField
-                  label="h边直径"
-                  value={hSideMidBar.diameter}
-                  options={COMMON_DIA as unknown as number[]}
-                  onChange={(v) => update({ hSideMidBar: { ...hSideMidBar, grade: params.longitudinal.grade, diameter: v } })}
-                  fmt={(v) => `⌀${v}`}
-                />
+              <div className="flex gap-2">
+                <div className="flex-1 flex items-center gap-1 bg-surface-container-lowest border border-white/10 rounded-lg px-2 py-1">
+                  <span className="text-[10px] text-on-surface-variant whitespace-nowrap">b边中部</span>
+                  <input type="number" value={bSideMidBar.count}
+                    onChange={(e) => update({ bSideMidBar: { ...bSideMidBar, grade: params.longitudinal.grade, count: Number(e.target.value) } })}
+                    step={1} min={0} max={8}
+                    className="w-10 bg-surface-container-highest border border-white/10 rounded px-1 py-0.5 font-label-numeric text-label-numeric text-on-surface text-center outline-none focus:border-primary-fixed-dim font-mono" />
+                  <span className="text-[10px] text-on-surface-variant/50 font-mono">根</span>
+                  <span className="text-on-surface-variant mx-0.5">×</span>
+                  <SelectField
+                    label=""
+                    value={bSideMidBar.diameter}
+                    options={COMMON_DIA as unknown as number[]}
+                    onChange={(v) => update({ bSideMidBar: { ...bSideMidBar, grade: params.longitudinal.grade, diameter: v } })}
+                    fmt={(v) => `⌀${v}`}
+                  />
+                </div>
+                <div className="flex-1 flex items-center gap-1 bg-surface-container-lowest border border-white/10 rounded-lg px-2 py-1">
+                  <span className="text-[10px] text-on-surface-variant whitespace-nowrap">h边中部</span>
+                  <input type="number" value={hSideMidBar.count}
+                    onChange={(e) => update({ hSideMidBar: { ...hSideMidBar, grade: params.longitudinal.grade, count: Number(e.target.value) } })}
+                    step={1} min={0} max={8}
+                    className="w-10 bg-surface-container-highest border border-white/10 rounded px-1 py-0.5 font-label-numeric text-label-numeric text-on-surface text-center outline-none focus:border-primary-fixed-dim font-mono" />
+                  <span className="text-[10px] text-on-surface-variant/50 font-mono">根</span>
+                  <span className="text-on-surface-variant mx-0.5">×</span>
+                  <SelectField
+                    label=""
+                    value={hSideMidBar.diameter}
+                    options={COMMON_DIA as unknown as number[]}
+                    onChange={(v) => update({ hSideMidBar: { ...hSideMidBar, grade: params.longitudinal.grade, diameter: v } })}
+                    fmt={(v) => `⌀${v}`}
+                  />
+                </div>
               </div>
             </div>
           )}
@@ -183,101 +291,73 @@ export function ColumnParamContent() {
         {/* Stirrup */}
         <div className="space-y-3">
           <h4 className="font-body-sm text-body-sm font-medium text-on-surface font-bold">箍筋</h4>
-          <div className="grid grid-cols-2 gap-3">
-            <SelectField
-              label="等级"
-              value={params.stirrup.grade}
-              options={GRADES}
-              onChange={(v) => update({ stirrup: { ...params.stirrup, grade: v } })}
-            />
-            <SelectField
-              label="直径"
-              value={params.stirrup.diameter}
-              options={STIRRUP_DIA as unknown as number[]}
-              onChange={(v) => update({ stirrup: { ...params.stirrup, diameter: v } })}
-              fmt={(v) => `⌀${v}`}
-            />
-            <NumField label="加密间距" value={params.stirrup.spacingDense} onChange={(v) => update({ stirrup: { ...params.stirrup, spacingDense: v } })} step={25} min={50} max={200} unit="mm" />
-            <NumField label="非加密间距" value={params.stirrup.spacingSparse} onChange={(v) => update({ stirrup: { ...params.stirrup, spacingSparse: v } })} step={25} min={50} max={400} unit="mm" />
-            <SelectField
-              label="类型编号"
-              value={params.stirrup.typeNo ?? 1}
-              options={[1, 2, 3, 4]}
-              onChange={(v) => update({ stirrup: { ...params.stirrup, typeNo: v as 1 | 2 | 3 | 4 } })}
-              fmt={(v) => `类型${v}`}
-            />
-            <SelectField
-              label="m 肢(b向)"
-              value={legsX}
-              options={[2, 3, 4, 5, 6]}
-              onChange={(v) => update({ stirrup: { ...params.stirrup, legsX: v, legs: (v > 2 || legsY > 2 ? 4 : 2) as 2 | 4 } })}
-              fmt={(v) => `${v}肢`}
-            />
-            <SelectField
-              label="n 肢(h向)"
-              value={legsY}
-              options={[2, 3, 4, 5, 6]}
-              onChange={(v) => update({ stirrup: { ...params.stirrup, legsY: v, legs: (legsX > 2 || v > 2 ? 4 : 2) as 2 | 4 } })}
-              fmt={(v) => `${v}肢`}
-            />
-            <SelectField
-              label="箍筋类型"
-              value={params.stirrup.type}
-              options={['rect', 'well', 'composite'] as const}
-              onChange={(v) => update({ stirrup: { ...params.stirrup, type: v as 'rect' | 'well' | 'composite' } })}
-              fmt={(v) => ({ rect: '矩形', well: '井字', composite: '复合' })[v]}
-            />
+          <div className="flex flex-col gap-2">
+            <div className="flex gap-2">
+              <div className="flex-1 flex items-center gap-1.5 bg-surface-container-lowest border border-white/10 rounded-lg px-2 py-1">
+                <span className="text-[11px] text-on-surface-variant whitespace-nowrap">等级</span>
+                <select
+                  className="flex-1 bg-surface-container-highest border border-white/10 rounded px-1.5 py-0.5 font-label-numeric text-label-numeric text-on-surface outline-none focus:border-primary-fixed-dim font-mono"
+                  value={params.stirrup.grade}
+                  onChange={(e) => update({ stirrup: { ...params.stirrup, grade: e.target.value as any } })}
+                >
+                  {GRADES.map((g) => <option key={g} value={g}>{g}</option>)}
+                </select>
+              </div>
+              <div className="flex-1 flex items-center gap-1.5 bg-surface-container-lowest border border-white/10 rounded-lg px-2 py-1">
+                <span className="text-[11px] text-on-surface-variant whitespace-nowrap">直径</span>
+                <select
+                  className="flex-1 bg-surface-container-highest border border-white/10 rounded px-1.5 py-0.5 font-label-numeric text-label-numeric text-on-surface outline-none focus:border-primary-fixed-dim font-mono"
+                  value={params.stirrup.diameter}
+                  onChange={(e) => update({ stirrup: { ...params.stirrup, diameter: Number(e.target.value) } })}
+                >
+                  {(STIRRUP_DIA as unknown as number[]).map((d) => <option key={d} value={d}>⌀{d}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <div className="flex-1 flex items-center gap-1.5 bg-surface-container-lowest border border-white/10 rounded-lg px-2 py-1">
+                <span className="text-[11px] text-on-surface-variant whitespace-nowrap">加密间距</span>
+                <input type="number" value={params.stirrup.spacingDense}
+                  onChange={(e) => update({ stirrup: { ...params.stirrup, spacingDense: Number(e.target.value) } })}
+                  step={25} min={50} max={200}
+                  className="flex-1 bg-surface-container-highest border border-white/10 rounded px-1.5 py-0.5 font-label-numeric text-label-numeric text-on-surface text-right outline-none focus:border-primary-fixed-dim font-mono" />
+                <span className="text-[10px] text-on-surface-variant/50 font-mono">mm</span>
+              </div>
+              <div className="flex-1 flex items-center gap-1.5 bg-surface-container-lowest border border-white/10 rounded-lg px-2 py-1">
+                <span className="text-[11px] text-on-surface-variant whitespace-nowrap">非加密间距</span>
+                <input type="number" value={params.stirrup.spacingSparse}
+                  onChange={(e) => update({ stirrup: { ...params.stirrup, spacingSparse: Number(e.target.value) } })}
+                  step={25} min={50} max={400}
+                  className="flex-1 bg-surface-container-highest border border-white/10 rounded px-1.5 py-0.5 font-label-numeric text-label-numeric text-on-surface text-right outline-none focus:border-primary-fixed-dim font-mono" />
+                <span className="text-[10px] text-on-surface-variant/50 font-mono">mm</span>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <div className="flex-1 flex items-center gap-1.5 bg-surface-container-lowest border border-white/10 rounded-lg px-2 py-1">
+                <span className="text-[11px] text-on-surface-variant whitespace-nowrap">m 肢(b向)</span>
+                <select
+                  className="flex-1 bg-surface-container-highest border border-white/10 rounded px-1.5 py-0.5 font-label-numeric text-label-numeric text-on-surface outline-none focus:border-primary-fixed-dim font-mono"
+                  value={legsX}
+                  onChange={(e) => { const v = Number(e.target.value); update({ stirrup: { ...params.stirrup, legsX: v, legs: (v > 2 || legsY > 2 ? 4 : 2) as 2 | 4 } }); }}
+                >
+                  {[2, 3, 4, 5, 6].map((v) => <option key={v} value={v}>{v}肢</option>)}
+                </select>
+              </div>
+              <div className="flex-1 flex items-center gap-1.5 bg-surface-container-lowest border border-white/10 rounded-lg px-2 py-1">
+                <span className="text-[11px] text-on-surface-variant whitespace-nowrap">n 肢(h向)</span>
+                <select
+                  className="flex-1 bg-surface-container-highest border border-white/10 rounded px-1.5 py-0.5 font-label-numeric text-label-numeric text-on-surface outline-none focus:border-primary-fixed-dim font-mono"
+                  value={legsY}
+                  onChange={(e) => { const v = Number(e.target.value); update({ stirrup: { ...params.stirrup, legsY: v, legs: (legsX > 2 || v > 2 ? 4 : 2) as 2 | 4 } }); }}
+                >
+                  {[2, 3, 4, 5, 6].map((v) => <option key={v} value={v}>{v}肢</option>)}
+                </select>
+              </div>
+            </div>
           </div>
         </div>
 
         <div className="divider-gradient" />
-
-        <div className="divider-gradient" />
-
-        {/* Connection & anchorage */}
-        <div className="space-y-3">
-          <h4 className="font-body-sm text-body-sm font-medium text-on-surface font-bold">连接与锚固</h4>
-          <div className="flex gap-2">
-            {CONNECTION_TYPES.map((t) => (
-              <button
-                key={t.value}
-                onClick={() => update({ connectionType: t.value })}
-                className={`flex-1 py-1.5 rounded border text-[11px] font-mono transition-colors ${
-                  (params.connectionType ?? 'tie') === t.value
-                    ? 'bg-primary-fixed-dim/15 border-primary-fixed-dim/50 text-primary-fixed-dim font-medium'
-                    : 'bg-surface-container-lowest border-white/10 text-on-surface-variant hover:bg-white/5'
-                }`}
-              >
-                {t.label}
-              </button>
-            ))}
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <SelectField
-              label="柱位置"
-              value={params.position ?? 'middle'}
-              options={POSITIONS.map((p) => p.value)}
-              onChange={(v) => update({ position: v as ColumnPosition })}
-              fmt={(v) => POSITIONS.find((p) => p.value === v)?.label ?? String(v)}
-            />
-            <SelectField
-              label="柱根"
-              value={params.baseType ?? 'foundation'}
-              options={BASE_TYPES.map((p) => p.value)}
-              onChange={(v) => update({ baseType: v as ColumnBaseType })}
-              fmt={(v) => BASE_TYPES.find((p) => p.value === v)?.label ?? String(v)}
-            />
-          </div>
-          {(params.connectionType ?? 'tie') === 'tie' && (
-            <SelectField
-              label="搭接接头面积百分率"
-              value={params.lapRatio ?? 50}
-              options={[25, 50, 100]}
-              onChange={(v) => update({ lapRatio: v as 25 | 50 | 100 })}
-              fmt={(v) => `≤${v}%  (ζl=${v <= 25 ? 1.2 : v <= 50 ? 1.4 : 1.6})`}
-            />
-          )}
-        </div>
 
         <button className="mt-2 w-full py-2 bg-surface-container border border-primary-fixed-dim/30 text-primary-fixed-dim font-body-sm text-body-sm rounded hover:bg-primary-fixed-dim hover:text-on-primary transition-colors duration-200">
           应用更新
