@@ -1,10 +1,14 @@
 import * as THREE from 'three';
 import type { ColumnParams } from '../domain/kz/types';
-import type { ColumnDerived } from '../domain/kz/derive';
+import { getParamsForFloor } from '../domain/kz/types';
+import type { ColumnDerived, SectionDims } from '../domain/kz/derive';
+import { calcBarPositionsForSection } from '../domain/kz/derive';
 import {
   columnTopBend,
   columnTopCanStraightAnchor,
   columnTopOuterLap,
+  columnConnectionOffset,
+  laE,
 } from '../domain/codes/22G101';
 import type { ConcreteGrade, SeismicLevel, RebarGrade } from '../domain/kl/types';
 import { tubeFromPolyline } from './rebarPath';
@@ -68,8 +72,10 @@ export interface ColumnLayout {
   topY: number;
   /** 层数 */
   floorCount: number;
-  /** 每层净高 */
+  /** 每层净高（层高 = Hn + beamHeight） */
   floorHeight: number;
+  /** 框架梁高 */
+  beamHeight: number;
 }
 
 /** 柱顶梁高默认值 (mm)，与 ColumnScene 场景中绘制的梁一致 */
@@ -88,6 +94,7 @@ export function makeColumnLayout(Hn: number, beamHeight = COLUMN_TOP_BEAM_HEIGHT
     topY: floors * storyH + beamHeight,
     floorCount: floors,
     floorHeight: storyH,
+    beamHeight,
   };
 }
 
@@ -192,6 +199,106 @@ function baseAnchorPoints(
   return [new THREE.Vector3(x, layout.botY, z)];
 }
 
+/** 上下层变截面的过渡梁区 Y 范围（仅 floors>=2 时存在） */
+function sectionTransitionY(layout: ColumnLayout): { start: number; end: number } | null {
+  if (layout.floorCount < 2) return null;
+  return { start: layout.floorHeight, end: layout.floorHeight + layout.beamHeight };
+}
+
+/**
+ * 生成从柱底到柱顶的竖直中心线，在上下层变截面时于梁高范围内斜弯过渡。
+ * (x0,z0) 为下层截面位置，(x1,z1) 为上层截面位置（已含偏移）。
+ */
+function verticalCenterline(
+  x0: number,
+  z0: number,
+  x1: number,
+  z1: number,
+  layout: ColumnLayout,
+  cover: number,
+): THREE.Vector3[] {
+  const topY = layout.topBeamTopY - cover;
+  const trans = sectionTransitionY(layout);
+  if (!trans) {
+    return [new THREE.Vector3(x0, layout.botY, z0), new THREE.Vector3(x0, topY, z0)];
+  }
+  return [
+    new THREE.Vector3(x0, layout.botY, z0),
+    new THREE.Vector3(x0, trans.start, z0),
+    new THREE.Vector3(x1, trans.end, z1),
+    new THREE.Vector3(x1, topY, z1),
+  ];
+}
+
+/** 向截面内侧微移 1.5d，用于绑扎搭接上下段错开显示 */
+function inwardNudge(x: number, z: number, d: number): { x: number; z: number } {
+  const nudge = new THREE.Vector2(x, z);
+  if (nudge.length() < 1e-6) nudge.set(1, 0);
+  nudge.normalize().multiplyScalar(-1.5 * d);
+  return { x: x + nudge.x, z: z + nudge.y };
+}
+
+/**
+ * 生成从柱底到 targetY 的纵筋路径。
+ * 当 targetY 位于上层柱段（高于变截面过渡区）时，终点取上层截面位置 (x1,z1)。
+ */
+function buildPathToY(
+  x0: number,
+  z0: number,
+  x1: number,
+  z1: number,
+  layout: ColumnLayout,
+  targetY: number,
+): THREE.Vector3[] {
+  const trans = sectionTransitionY(layout);
+  if (!trans || targetY <= trans.start) {
+    return [
+      new THREE.Vector3(x0, layout.botY, z0),
+      new THREE.Vector3(x0, targetY, z0),
+    ];
+  }
+  if (targetY >= trans.end) {
+    return [
+      new THREE.Vector3(x0, layout.botY, z0),
+      new THREE.Vector3(x0, trans.start, z0),
+      new THREE.Vector3(x1, trans.end, z1),
+      new THREE.Vector3(x1, targetY, z1),
+    ];
+  }
+  // targetY 位于过渡梁区，线性内插截面位置
+  const t = (targetY - trans.start) / (trans.end - trans.start);
+  const x = x0 + (x1 - x0) * t;
+  const z = z0 + (z1 - z0) * t;
+  return [
+    new THREE.Vector3(x0, layout.botY, z0),
+    new THREE.Vector3(x0, trans.start, z0),
+    new THREE.Vector3(x, targetY, z),
+  ];
+}
+
+/**
+ * 生成从 startY 到柱顶的纵筋路径。
+ * 要求 startY 已经位于上层柱段（高于过渡区），因此全程沿上层截面位置 (x1,z1)。
+ */
+function buildPathFromYToTop(
+  x1: number,
+  z1: number,
+  startY: number,
+  d: number,
+  layout: ColumnLayout,
+  cover: number,
+  outer: boolean,
+  topOpts: TopAnchorOpts,
+): THREE.Vector3[] {
+  const topY = layout.topBeamTopY - cover;
+  const topAnchor = topAnchorPoints(x1, z1, d, layout, outer, topOpts);
+  return dedupe([
+    new THREE.Vector3(x1, startY, z1),
+    new THREE.Vector3(x1, topY, z1),
+    ...topAnchor.pts,
+  ]);
+}
+
 export function buildColumnLongitudinal(
   params: ColumnParams,
   derived: ColumnDerived,
@@ -202,87 +309,198 @@ export function buildColumnLongitudinal(
 
   const connType = params.connectionType ?? 'tie';
   const position = params.position ?? 'middle';
-  const baseType = params.baseType ?? 'foundation';
   const lap = derived.lapLength;
   const stagger = derived.connectionStagger;
-  const baseSplice = layout.floorY + derived.connectionOffset; // ≥ Hn/3
+
+  // 上下层纵筋连接区位置：多层柱时位于上层柱底部非加密区以上（楼面梁顶 + Hn/3），
+  // 单层柱时位于下层柱非加密区（≥ Hn/3）。
+  const floors = layout.floorCount;
+  const upperHn = params.upperHn ?? params.Hn;
+  const upperConnOffset = columnConnectionOffset(upperHn);
+  const baseSplice = floors >= 2
+    ? layout.floorHeight + layout.beamHeight + upperConnOffset
+    : layout.floorY + derived.connectionOffset;
 
   const c = params.cover + params.stirrup.diameter / 2;
   const halfW = params.b / 2 - c;
   const halfH = params.h / 2 - c;
 
-  derived.barPositions.forEach((pos, i) => {
-    const x = pos.x;
-    const z = pos.y;
-    const d = pos.bundle.diameter;
-    const r = d / 2;
-    const grade = pos.bundle.grade as string;
-    const color = BAR_COLORS[pos.kind] ?? '#ef5350';
-    const baseLabel = `柱${BAR_LABELS[pos.kind] ?? '纵筋'} #${i + 1}`;
-    const outer = isOuterBar(x, z, halfW, halfH, position);
-    const topOpts: TopAnchorOpts = { cover: params.cover, grade: pos.bundle.grade, concrete: params.concrete, seismic: params.seismic };
+  // 上层截面尺寸与偏移
+  const topB = params.topB ?? params.b;
+  const topH = params.topH ?? params.h;
+  const offsetX = params.topOffsetX ?? 0;
+  const offsetZ = params.topOffsetZ ?? 0;
+  const upperDims: SectionDims = { b: topB, h: topH };
+  const upperParams = getParamsForFloor(params, true);
+  const upperBarPositions = calcBarPositionsForSection(upperParams, upperDims).map((p) => ({
+    ...p,
+    x: p.x + offsetX,
+    y: p.y + offsetZ,
+  }));
+
+  // 柱顶锚固外侧判断按上层截面尺寸
+  const upperHalfW = topB / 2 - c;
+  const upperHalfH = topH / 2 - c;
+
+  derived.barPositions.forEach((lowerPos, i) => {
+    const upperPos = upperBarPositions[i];
+    if (!upperPos) return;
+    const x0 = lowerPos.x;
+    const z0 = lowerPos.y;
+    const x1 = upperPos.x;
+    const z1 = upperPos.y;
+    const dLower = lowerPos.bundle.diameter;
+    const dUpper = upperPos.bundle.diameter;
+    const gradeLower = lowerPos.bundle.grade as string;
+    const gradeUpper = upperPos.bundle.grade as string;
+    const color = BAR_COLORS[lowerPos.kind] ?? '#ef5350';
+    const baseLabel = `柱${BAR_LABELS[lowerPos.kind] ?? '纵筋'} #${i + 1}`;
+    const outer = isOuterBar(x1, z1, upperHalfW, upperHalfH, position);
+    const topOpts: TopAnchorOpts = { cover: params.cover, grade: upperPos.bundle.grade, concrete: params.concrete, seismic: params.seismic };
     const topNote = (mode: 'straight' | 'bend' | 'outerLap') =>
       mode === 'straight' ? '柱顶直锚' : mode === 'outerLap' ? '柱顶外侧搭接 1.5labE' : '柱顶 12d 弯锚';
 
-    // 相邻纵筋错开：奇偶两批，第二批连接点上移 (lap + stagger)
+    // 上下层纵筋直径不同时，按 22G101-1 2-9 采用机械连接（套筒连接）
+    const dDiffers = dLower !== dUpper;
+    const effectiveConnType = dDiffers ? 'mechanical' : connType;
+
+    // 相邻纵筋错开：奇偶两批，第二批连接点上移
+    // - 绑扎搭接：错开 0.3 llE
+    // - 机械连接：相邻接头错开 ≥ 35d（d 为纵筋直径）
     const batch = i % 2;
-    const spliceY = baseSplice + batch * (lap + stagger);
+    const staggerDist = effectiveConnType === 'tie' ? lap + stagger : 35 * dLower;
+    const spliceY = baseSplice + batch * staggerDist;
 
-    if (connType === 'tie') {
-      // 绑扎搭接：下筋 + 上筋 搭接 llE，上筋向截面内侧微移 1.5d 以示双筋并扎
-      const lapBottom = spliceY;
-      const lapTop = spliceY + lap;
-      const nudge = new THREE.Vector2(x, z);
-      if (nudge.length() < 1e-6) nudge.set(1, 0);
-      nudge.normalize().multiplyScalar(-1.5 * d);
-      const ux = x + nudge.x;
-      const uz = z + nudge.y;
+    // 变截面斜弯条件：22G101-1 7.2.7，水平偏移 Δ 与梁高 hb 之比 ≤ 1/6 时允许弯折通上
+    const trans = sectionTransitionY(layout);
+    const dx = x1 - x0;
+    const dz = z1 - z0;
+    const horizontalDelta = Math.sqrt(dx * dx + dz * dz);
+    const canBend = !trans || layout.beamHeight <= 0 || horizontalDelta / layout.beamHeight <= 1 / 6;
 
-      // 下筋：柱底 → 搭接顶
+    if (!canBend) {
+      // 无法弯折通上：按 22G101-1 7.2.7 图③处理
+      // 下柱筋：柱底 → 梁顶 → 水平向截面内侧弯折 12d（倒 L 形）
+      const lowerHook = 12 * dLower;
+      const inward = new THREE.Vector2(x0, z0);
+      if (inward.length() < 1e-6) inward.set(1, 0);
+      inward.normalize().multiplyScalar(-1);
+      const ix = inward.x;
+      const iz = inward.y;
+      // 伸到梁上截面下端，考虑保护层厚度：纵筋中心线位于上截面底 - cover
+      const lowerEnd = trans.end - params.cover;
       const lowerPts = [
-        ...baseAnchorPoints(x, z, layout),
-        new THREE.Vector3(x, lapTop, z),
+        new THREE.Vector3(x0, layout.botY, z0),
+        new THREE.Vector3(x0, lowerEnd, z0),
+        new THREE.Vector3(x0 + ix * lowerHook, lowerEnd, z0 + iz * lowerHook),
       ];
       bars.push({
-        geometry: tubeFromPolyline(lowerPts, r, 10),
+        geometry: tubeFromPolyline(lowerPts, dLower / 2, 10),
         points: lowerPts,
-        meta: { label: `${baseLabel}(下段)`, length: Math.round(polylineLength(lowerPts)), diameter: d, grade, kind: 'lower', note: `绑扎搭接 llE=${lap}` },
+        meta: { label: `${baseLabel}(下柱锚固段)`, length: Math.round(polylineLength(lowerPts)), diameter: dLower, grade: gradeLower, kind: 'lower', note: `变截面无法弯折通上，下柱筋伸至梁顶后水平弯折 12d` },
         barKey: `col-bar-${i}-lo`,
         color,
       });
 
-      // 上筋：搭接底 → 柱顶锚固（上段在 nudge 位置）
-      const top = topAnchorPoints(ux, uz, d, layout, outer, topOpts);
-      const upperClean = dedupe([new THREE.Vector3(ux, lapBottom, uz), ...top.pts]);
+      // 上柱筋：从梁顶（考虑 cover）向下 1.2laE 处起筋 → 柱顶锚固
+      const upperLa = laE(gradeUpper as RebarGrade, dUpper, params.concrete, params.seismic);
+      const upperStart = lowerEnd - 1.2 * upperLa;
+      const topAnchor = topAnchorPoints(x1, z1, dUpper, layout, outer, topOpts);
+      const upperPts = buildPathFromYToTop(x1, z1, upperStart, dUpper, layout, params.cover, outer, topOpts);
       bars.push({
-        geometry: tubeFromPolyline(upperClean, r, 10),
-        points: upperClean,
-        meta: { label: `${baseLabel}(上段)`, length: Math.round(polylineLength(upperClean)), diameter: d, grade, kind: 'upper', note: topNote(top.mode) },
+        geometry: tubeFromPolyline(upperPts, dUpper / 2, 10),
+        points: upperPts,
+        meta: { label: `${baseLabel}(上柱起筋段)`, length: Math.round(polylineLength(upperPts)), diameter: dUpper, grade: gradeUpper, kind: 'upper', note: `${topNote(topAnchor.mode)} · 变截面无法弯折通上，上柱筋向下延伸 1.2laE 起筋` },
         barKey: `col-bar-${i}-up`,
         color,
       });
+      return;
+    }
+
+    if (effectiveConnType === 'tie') {
+      const d = dLower;
+      const r = d / 2;
+      const lapBottom = spliceY;
+      const lapTop = spliceY + lap;
+      // 连接区位于上层柱，上下段错开显示均按上层截面位置内移
+      const loNudge = inwardNudge(x1, z1, d);
+      const upNudge = inwardNudge(x1, z1, d);
+
+      // 下筋：柱底 → 搭接顶（位于上层截面）
+      const lowerPts = buildPathToY(loNudge.x, loNudge.z, upNudge.x, upNudge.z, layout, lapTop);
+      bars.push({
+        geometry: tubeFromPolyline(lowerPts, r, 10),
+        points: lowerPts,
+        meta: { label: `${baseLabel}(下段)`, length: Math.round(polylineLength(lowerPts)), diameter: d, grade: gradeLower, kind: 'lower', note: `绑扎搭接 llE=${lap}` },
+        barKey: `col-bar-${i}-lo`,
+        color,
+      });
+
+      // 上筋：搭接底 → 柱顶锚固
+      const topAnchor = topAnchorPoints(upNudge.x, upNudge.z, d, layout, outer, topOpts);
+      const upperPts = buildPathFromYToTop(upNudge.x, upNudge.z, lapBottom, d, layout, params.cover, outer, topOpts);
+      bars.push({
+        geometry: tubeFromPolyline(upperPts, r, 10),
+        points: upperPts,
+        meta: { label: `${baseLabel}(上段)`, length: Math.round(polylineLength(upperPts)), diameter: d, grade: gradeUpper, kind: 'upper', note: topNote(topAnchor.mode) },
+        barKey: `col-bar-${i}-up`,
+        color,
+      });
+    } else if (dDiffers) {
+      // 机械连接（变径）：下段与上段分别按各自直径，接头处用锥形套筒标记
+      const rLower = dLower / 2;
+      const rUpper = dUpper / 2;
+
+      // 下筋：柱底 → 接头（接头位于上层截面）
+      const lowerPts = buildPathToY(x0, z0, x1, z1, layout, spliceY);
+      bars.push({
+        geometry: tubeFromPolyline(lowerPts, rLower, 10),
+        points: lowerPts,
+        meta: { label: `${baseLabel}(下段)`, length: Math.round(polylineLength(lowerPts)), diameter: dLower, grade: gradeLower, kind: 'lower', note: `机械连接（下柱 ⌀${dLower}）` },
+        barKey: `col-bar-${i}-lo`,
+        color,
+      });
+
+      // 上筋：接头 → 柱顶锚固
+      const topAnchor = topAnchorPoints(x1, z1, dUpper, layout, outer, topOpts);
+      const upperPts = buildPathFromYToTop(x1, z1, spliceY, dUpper, layout, params.cover, outer, topOpts);
+      bars.push({
+        geometry: tubeFromPolyline(upperPts, rUpper, 10),
+        points: upperPts,
+        meta: { label: `${baseLabel}(上段)`, length: Math.round(polylineLength(upperPts)), diameter: dUpper, grade: gradeUpper, kind: 'upper', note: `${topNote(topAnchor.mode)} · 机械连接（上柱 ⌀${dUpper}）` },
+        barKey: `col-bar-${i}-up`,
+        color,
+      });
+
+      // 变径套筒标记：连接区长度按较小直径取值，位置取接头中心点
+      const minD = Math.min(dLower, dUpper);
+      const connPt = lowerPts[lowerPts.length - 1];
+      const markerGeo = new THREE.CylinderGeometry(dUpper * 0.8, dLower * 0.8, 8 * minD, 12);
+      markerGeo.translate(connPt.x, connPt.y, connPt.z);
+      markers.push({ geometry: markerGeo, type: 'mechanical' });
     } else {
       // 机械连接 / 焊接：连续筋在接头处对接，附套筒/焊点标记
-      const top = topAnchorPoints(x, z, d, layout, outer, topOpts);
-      const fullPts = dedupe([
-        ...baseAnchorPoints(x, z, layout),
-        ...top.pts,
-      ]);
-      const connNote = connType === 'mechanical' ? '机械连接' : '焊接';
+      const d = dLower;
+      const r = d / 2;
+      const line = verticalCenterline(x0, z0, x1, z1, layout, params.cover);
+      const topAnchor = topAnchorPoints(x1, z1, d, layout, outer, topOpts);
+      const fullPts = dedupe([...line, ...topAnchor.pts]);
+      const connNote = effectiveConnType === 'mechanical' ? '机械连接' : '焊接';
       bars.push({
         geometry: tubeFromPolyline(fullPts, r, 10),
         points: fullPts,
-        meta: { label: baseLabel, length: Math.round(polylineLength(fullPts)), diameter: d, grade, kind: 'continuous', note: `${connNote} · ${topNote(top.mode)}` },
+        meta: { label: baseLabel, length: Math.round(polylineLength(fullPts)), diameter: d, grade: gradeLower, kind: 'continuous', note: `${connNote} · ${topNote(topAnchor.mode)}` },
         barKey: `col-bar-${i}`,
         color,
       });
 
-      // 接头标记
-      const markerGeo = connType === 'mechanical'
+      // 接头标记位于上层截面（连接区在上层柱底部非加密区内）
+      const connPt = buildPathToY(x0, z0, x1, z1, layout, spliceY).slice(-1)[0];
+      const markerGeo = effectiveConnType === 'mechanical'
         ? new THREE.CylinderGeometry(d * 0.8, d * 0.8, 8 * d, 12)
         : new THREE.SphereGeometry(d * 0.7, 12, 8);
-      markerGeo.translate(x, spliceY, z);
-      markers.push({ geometry: markerGeo, type: connType });
+      markerGeo.translate(connPt.x, connPt.y, connPt.z);
+      markers.push({ geometry: markerGeo, type: effectiveConnType });
     }
   });
 

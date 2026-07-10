@@ -39,6 +39,16 @@ export interface ColumnStirrupSpec {
   };
 }
 
+/** 上层柱纵筋/箍筋配置（未指定字段则与下层共用全局配置） */
+export interface ColumnTopRebar {
+  longitudinal?: RebarBundle;
+  longitudinalMode?: ColumnLongitudinalMode;
+  cornerBar?: RebarBundle;
+  bSideMidBar?: RebarBundle;
+  hSideMidBar?: RebarBundle;
+  stirrup?: ColumnStirrupSpec;
+}
+
 export interface ColumnParams {
   /** 柱编号 */
   id?: string;
@@ -52,6 +62,10 @@ export interface ColumnParams {
   topB?: number;
   /** 顶层柱截面高度 (mm) */
   topH?: number;
+  /** 顶层柱截面中心相对下层中心在 b 向 (x 轴) 的偏移 (mm)，正方向为 +x */
+  topOffsetX?: number;
+  /** 顶层柱截面中心相对下层中心在 h 向 (z 轴) 的偏移 (mm)，正方向为 +z */
+  topOffsetZ?: number;
   /** 柱净高 Hn (mm) — 下层净高 */
   Hn: number;
   /** 上层净高 (mm) */
@@ -90,4 +104,40 @@ export interface ColumnParams {
   baseType?: ColumnBaseType;
   /** 层数 (默认 1) */
   floors?: number;
+  /** 上层柱纵筋/箍筋配置（未指定则与下层共用全局配置） */
+  topRebar?: ColumnTopRebar;
+}
+
+/** 获取指定楼层生效的 ColumnParams（上层字段未指定时回退到全局/下层配置） */
+export function getParamsForFloor(params: ColumnParams, isUpper: boolean): ColumnParams {
+  if (!isUpper) {
+    // 全部同配时统一以 longitudinal 为准，忽略角筋/中部筋的显式覆盖
+    if (params.longitudinalMode === 'uniform') {
+      return { ...params, cornerBar: undefined, bSideMidBar: undefined, hSideMidBar: undefined };
+    }
+    return params;
+  }
+  if (!params.topRebar) return params;
+  const t = params.topRebar;
+  const mode = t.longitudinalMode ?? params.longitudinalMode ?? 'uniform';
+  if (mode === 'uniform') {
+    return {
+      ...params,
+      longitudinal: t.longitudinal ?? params.longitudinal,
+      stirrup: t.stirrup ?? params.stirrup,
+      longitudinalMode: mode,
+      cornerBar: undefined,
+      bSideMidBar: undefined,
+      hSideMidBar: undefined,
+    };
+  }
+  return {
+    ...params,
+    longitudinal: t.longitudinal ?? params.longitudinal,
+    stirrup: t.stirrup ?? params.stirrup,
+    longitudinalMode: mode,
+    cornerBar: t.cornerBar ?? params.cornerBar,
+    bSideMidBar: t.bSideMidBar ?? params.bSideMidBar,
+    hSideMidBar: t.hSideMidBar ?? params.hSideMidBar,
+  };
 }

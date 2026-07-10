@@ -1,7 +1,8 @@
 import { useMemo, useState, useRef, useCallback } from 'react';
 import { useColumnStore } from '../../store/columnStore';
-import { deriveColumn } from '../../domain/kz/derive';
+import { deriveColumn, calcBarPositionsForSection } from '../../domain/kz/derive';
 import type { ColumnParams } from '../../domain/kz/types';
+import { getParamsForFloor } from '../../domain/kz/types';
 import { buildColumnLongitudinal, makeColumnLayout } from '../../geometry/buildColumnLongitudinal';
 import { RebarCutView } from '../RebarCutView';
 
@@ -44,6 +45,7 @@ function SlideToggle<T extends string>({ options, value, onChange }: {
 
 function ColumnSectionView() {
   const params = useColumnStore((s) => s.params);
+  const view = useColumnStore((s) => s.view);
   const derived = useMemo(() => deriveColumn(params), [params]);
   const [expanded, setExpanded] = useState(false);
   const [size, setSize] = useState({ w: 400, h: 360 });
@@ -66,19 +68,52 @@ function ColumnSectionView() {
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
   }, [size]);
+
+  // 根据剖切面 Y 位置判断当前剖到下层还是上层柱段
+  const floors = params.floors ?? 1;
+  const COLUMN_EXTEND = 500;
+  const BEAM_HEIGHT = 600;
+  const totalH = floors * (params.Hn + BEAM_HEIGHT) + BEAM_HEIGHT + COLUMN_EXTEND;
+  const yPos = (view.sectionCutY ?? 0.5) * totalH - COLUMN_EXTEND;
+  const storyH = params.Hn + BEAM_HEIGHT;
+  const isUpper = floors >= 2 && yPos >= storyH;
+
+  // 以下层截面作为剖切面 2D 视图的固定参考系，
+  // 上层截面按真实 b/h 和偏移量在该参考系内绘制：
+  // - 居中时上层截面居中且随尺寸缩小；
+  // - 偏心时对齐边保持不动，仅未对齐边收缩。
+  const lowerB = params.b;
+  const lowerH = params.h;
+  const b = isUpper ? (params.topB ?? params.b) : params.b;
+  const h = isUpper ? (params.topH ?? params.h) : params.h;
+  const offsetX = isUpper ? (params.topOffsetX ?? 0) : 0;
+  const offsetZ = isUpper ? (params.topOffsetZ ?? 0) : 0;
+
+  const barPositions = useMemo(() => {
+    if (!isUpper) return derived.barPositions;
+    const upperParams = getParamsForFloor(params, true);
+    return calcBarPositionsForSection(upperParams, { b, h }).map((p) => ({ ...p, x: p.x + offsetX, y: p.y + offsetZ }));
+  }, [isUpper, params, derived.barPositions, b, h, offsetX, offsetZ]);
+
   const W = 200;
-  const dim = Math.max(params.b, params.h);
-  const aspect = params.h / params.b;
+  const dim = Math.max(lowerB, lowerH);
+  const aspect = lowerH / lowerB;
   const H = Math.min(W * Math.max(aspect, 1), 240);
   const innerPad = 14;
   const scale = (W - innerPad * 2) / dim;
-  const toSvgX = (x: number) => innerPad + (x + params.b / 2) * scale;
-  const toSvgY = (y: number) => innerPad + (params.h / 2 - y) * scale;
+  const toSvgX = (x: number) => innerPad + (x + lowerB / 2) * scale;
+  const toSvgY = (y: number) => innerPad + (lowerH / 2 - y) * scale;
+
+  // 混凝土截面轮廓（按实际 b/h 绘制，不再撑满整个 viewBox）
+  const rectX = toSvgX(-b / 2 + offsetX);
+  const rectY = toSvgY(h / 2 + offsetZ);
+  const rectW = b * scale;
+  const rectH = h * scale;
 
   // 箍筋外框 — 按角筋外边界包裹，确保箍筋包住4个角筋
-  const barPosXs = derived.barPositions.map((p) => toSvgX(p.x));
-  const barPosYs = derived.barPositions.map((p) => toSvgY(p.y));
-  const maxBarDia = Math.max(...derived.barPositions.map((p) => p.bundle.diameter)) * scale;
+  const barPosXs = barPositions.map((p) => toSvgX(p.x));
+  const barPosYs = barPositions.map((p) => toSvgY(p.y));
+  const maxBarDia = Math.max(...barPositions.map((p) => p.bundle.diameter)) * scale;
   const barR = Math.max(maxBarDia / 2, 3);
   const gap = 2; // 箍筋内缘与纵筋外缘的间隙 (px)
   const sx0 = Math.min(...barPosXs) - barR - gap;
@@ -87,7 +122,7 @@ function ColumnSectionView() {
   const sy1 = Math.max(...barPosYs) + barR + gap;
 
   // 左上角角筋（用于弯钩定位）
-  const cornerBars = derived.barPositions.filter((pos) => pos.kind === 'corner');
+  const cornerBars = barPositions.filter((pos) => pos.kind === 'corner');
   const topLeftBar = cornerBars.reduce((best, pos) => (
     !best || pos.x < best.x || (pos.x === best.x && pos.y > best.y) ? pos : best
   ), undefined as (typeof cornerBars)[number] | undefined);
@@ -119,6 +154,9 @@ function ColumnSectionView() {
       >
         <h3 className="font-body-md text-body-md font-medium text-on-surface font-bold">
           剖切面 <span className="text-on-surface-variant text-[11px] ml-1">(Section A-A)</span>
+          <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-primary-fixed-dim/15 text-primary-fixed-dim font-mono">
+            {isUpper ? '上层' : '下层'}
+          </span>
         </h3>
         <SectionCutToggle />
       </div>
@@ -141,18 +179,18 @@ function ColumnSectionView() {
             </filter>
           </defs>
           {/* 混凝土截面轮廓 */}
-          <rect x={innerPad} y={innerPad} width={W - innerPad * 2} height={H - innerPad * 2} fill="rgba(59,73,76,0.1)" stroke="rgba(59,73,76,0.6)" strokeWidth={2} />
-          {/* 轴线 — A轴（//b方向，垂直于h边），1轴（//h方向，垂直于b边） */}
+          <rect x={rectX} y={rectY} width={rectW} height={rectH} fill="rgba(59,73,76,0.1)" stroke="rgba(59,73,76,0.6)" strokeWidth={2} />
+          {/* 轴线 — 1轴（垂直于b边），A轴（垂直于h边） */}
           <line x1={-16} y1={H/2} x2={W + 18} y2={H/2} stroke="#4dd0e1" strokeWidth={1} strokeDasharray="8,6" opacity={0.8} />
           <line x1={W/2} y1={-18} x2={W/2} y2={H + 18} stroke="#4dd0e1" strokeWidth={1} strokeDasharray="8,6" opacity={0.8} />
-          {/* A轴号（右端外侧） */}
+          {/* A轴号（右端外侧，平行于b向尺寸） */}
           <circle cx={W + 14} cy={H/2} r={8} fill="rgba(0,0,0,0.6)" stroke="#4dd0e1" strokeWidth={1.2} opacity={0.9} />
           <text x={W + 14} y={H/2} textAnchor="middle" dominantBaseline="central" fill="#4dd0e1" fontSize={9} fontWeight="bold" opacity={0.95} fontFamily="sans-serif">A</text>
-          {/* 1轴号（上端） */}
+          {/* 1轴号（上端，平行于h向尺寸） */}
           <circle cx={W/2} cy={-10} r={8} fill="rgba(0,0,0,0.6)" stroke="#4dd0e1" strokeWidth={1.2} opacity={0.9} />
           <text x={W/2} y={-10} textAnchor="middle" dominantBaseline="central" fill="#4dd0e1" fontSize={9} fontWeight="bold" opacity={0.95} fontFamily="sans-serif">1</text>
           {/* 截面方向 b / h 标注 — 放在柱边中间，留间距 */}
-          <text x={W/2} y={H + 36} textAnchor="middle" dominantBaseline="bottom" fill="#b0bec5" fontSize={27} fontFamily="sans-serif" fontWeight="bold">b</text>
+          <text x={W/2} y={H + 36} textAnchor="middle" dominantBaseline="auto" fill="#b0bec5" fontSize={27} fontFamily="sans-serif" fontWeight="bold">b</text>
           <text x={innerPad - 40} y={H/2} textAnchor="start" dominantBaseline="central" fill="#b0bec5" fontSize={27} fontFamily="sans-serif" fontWeight="bold">h</text>
           {/* 外箍筋 — 圆角矩形 (skill: strokeWidth=2.5, rx=3) */}
           <rect x={sx0} y={sy0} width={sx1 - sx0} height={sy1 - sy0} fill="none" stroke="#78909c" strokeWidth={2.5} rx={3} />
@@ -172,10 +210,10 @@ function ColumnSectionView() {
           })()}
           {/* 内箍筋 — 矩形箍包 bMid(黄) 和 hMid(蓝) 两组各4角 */}
           {(() => {
-            const bMidBars = derived.barPositions.filter((p) => p.kind === 'bMid');
-            const hMidBars = derived.barPositions.filter((p) => p.kind === 'hMid');
+            const bMidBars = barPositions.filter((p) => p.kind === 'bMid');
+            const hMidBars = barPositions.filter((p) => p.kind === 'hMid');
             const innerRects: { x: number; y: number; w: number; h: number }[] = [];
-            const addInnerRect = (bars: typeof derived.barPositions) => {
+            const addInnerRect = (bars: typeof barPositions) => {
               if (bars.length < 4) return;
               const xs = bars.map((p) => toSvgX(p.x));
               const ys = bars.map((p) => toSvgY(p.y));
@@ -203,7 +241,7 @@ function ColumnSectionView() {
             );
           })()}
           {/* 纵筋圆点 (skill: 最小半径 3px, SVG glow filter) */}
-          {derived.barPositions.map((pos, i) => {
+          {barPositions.map((pos, i) => {
             const cx = toSvgX(pos.x);
             const cy = toSvgY(pos.y);
             const dia = pos.bundle.diameter * scale;

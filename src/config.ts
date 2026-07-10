@@ -4,7 +4,12 @@ export const APP_DESCRIPTION = '结构工程师的 3D 配筋可视化平台';
 
 // 构件类型 — 按 22G101 系列图集排列
 // 22G101-1: 梁/柱/墙/板  22G101-2: 楼梯  22G101-3: 基础
-export const MEMBER_TYPES = ['KL', 'L', 'WKL', 'XL', 'KZ', 'QW', 'LB', 'AT', 'DJ'] as const;
+export const MEMBER_TYPES = [
+  'KL', 'L', 'WKL', 'XL', 'KZ', 'QW', 'LB',
+  'AT', 'BT', 'CT', 'DT', 'ET', 'FT', 'GT',
+  'ATa', 'ATb', 'ATc', 'BTb', 'CTa', 'CTb', 'DTb',
+  'DJ',
+] as const;
 export type MemberType = (typeof MEMBER_TYPES)[number];
 
 // 父类型（侧边栏一级入口）
@@ -30,7 +35,20 @@ export const MEMBER_LABELS: Record<MemberType, string> = {
   KZ: '框架柱',
   QW: '剪力墙',
   LB: '楼板',
-  AT: '楼梯',
+  AT: 'AT 型楼梯',
+  BT: 'BT 型楼梯',
+  CT: 'CT 型楼梯',
+  DT: 'DT 型楼梯',
+  ET: 'ET 型楼梯',
+  FT: 'FT 型楼梯',
+  GT: 'GT 型楼梯',
+  ATa: 'ATa 型楼梯',
+  ATb: 'ATb 型楼梯',
+  ATc: 'ATc 型楼梯',
+  BTb: 'BTb 型楼梯',
+  CTa: 'CTa 型楼梯',
+  CTb: 'CTb 型楼梯',
+  DTb: 'DTb 型楼梯',
   DJ: '基础',
 };
 
@@ -43,6 +61,19 @@ export const MEMBER_ICONS: Record<MemberType, string> = {
   QW: 'rectangle',
   LB: 'layers',
   AT: 'stairs',
+  BT: 'stairs',
+  CT: 'stairs',
+  DT: 'stairs',
+  ET: 'stairs',
+  FT: 'stairs',
+  GT: 'stairs',
+  ATa: 'stairs',
+  ATb: 'stairs',
+  ATc: 'stairs',
+  BTb: 'stairs',
+  CTa: 'stairs',
+  CTb: 'stairs',
+  DTb: 'stairs',
   DJ: 'foundation',
 };
 
@@ -52,7 +83,7 @@ export const MEMBER_SUBTYPES: Record<ParentType, MemberType[]> = {
   KZ: ['KZ'],
   QW: ['QW'],
   LB: ['LB'],
-  AT: ['AT'],
+  AT: ['AT', 'BT', 'CT', 'DT', 'ET', 'FT', 'GT', 'ATa', 'ATb', 'ATc', 'BTb', 'CTa', 'CTb', 'DTb'],
   DJ: ['DJ'],
 };
 
@@ -83,6 +114,19 @@ export const MEMBER_STATUS: Record<MemberType, 'ready' | 'dev' | 'planned'> = {
   KZ: 'ready',
   QW: 'planned',
   LB: 'planned',
-  AT: 'planned',
+  AT: 'ready',
+  BT: 'planned',
+  CT: 'planned',
+  DT: 'planned',
+  ET: 'planned',
+  FT: 'planned',
+  GT: 'planned',
+  ATa: 'planned',
+  ATb: 'planned',
+  ATc: 'planned',
+  BTb: 'planned',
+  CTa: 'planned',
+  CTb: 'planned',
+  DTb: 'planned',
   DJ: 'planned',
 };

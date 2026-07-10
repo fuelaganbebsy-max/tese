@@ -86,10 +86,16 @@ function calcDenseZoneTop(params: ColumnParams): number {
   return columnDenseZoneEnd(params.Hn, columnHc(params));
 }
 
+export interface SectionDims {
+  b: number;
+  h: number;
+}
+
 /**
  * 纵筋排布坐标 (矩形柱: 4 角 + 各边均匀分布)
+ * 可指定截面尺寸，便于上下层变截面时复用同一套配筋逻辑。
  */
-function calcBarPositions(params: ColumnParams): ColumnBarPosition[] {
+export function calcBarPositionsForSection(params: ColumnParams, section: SectionDims): ColumnBarPosition[] {
   const positions: ColumnBarPosition[] = [];
 
   const mode = params.longitudinalMode ?? 'uniform';
@@ -107,29 +113,50 @@ function calcBarPositions(params: ColumnParams): ColumnBarPosition[] {
   const stirrupD = params.stirrup.diameter;
   // 纵筋外缘与箍筋内缘间隙 = 剖切面 SVG 的 2px 折算为 mm
   const svgGapPx = 2;
-  const svgScale = (200 - 28) / Math.max(params.b, params.h); // W=200, innerPad=14
+  const svgScale = (200 - 28) / Math.max(section.b, section.h); // W=200, innerPad=14
   const stirrupGap = svgGapPx / svgScale;
-  const halfW = params.b / 2 - params.cover - stirrupD - stirrupGap - maxDia / 2;
-  const halfH = params.h / 2 - params.cover - stirrupD - stirrupGap - maxDia / 2;
+  const halfW = section.b / 2 - params.cover - stirrupD - stirrupGap - maxDia / 2;
+  const halfH = section.h / 2 - params.cover - stirrupD - stirrupGap - maxDia / 2;
 
-  // 4 角
+  // 纵筋按截面周长顺时针排列：
+  // 左上角 → 顶边中部筋(左→右) → 右上角 → 右边中部筋(上→下)
+  // → 右下角 → 底边中部筋(右→左) → 左下角 → 左边中部筋(底→顶)
+  // 这样相邻纵筋在数组中相邻，配合 buildColumnLongitudinal 里的 i%2 即可实现
+  // 相邻钢筋机械连接接头一上一下的棋盘式错开。
+
+  // 顶边
   positions.push({ x: -halfW, y: halfH, kind: 'corner', bundle: corner });
-  positions.push({ x: halfW, y: halfH, kind: 'corner', bundle: corner });
-  positions.push({ x: halfW, y: -halfH, kind: 'corner', bundle: corner });
-  positions.push({ x: -halfW, y: -halfH, kind: 'corner', bundle: corner });
-
   for (let i = 1; i <= bMid.count; i++) {
     const x = -halfW + (2 * halfW * i) / (bMid.count + 1);
     positions.push({ x, y: halfH, kind: 'bMid', bundle: cloneBundle(bMid, 1) });
+  }
+  positions.push({ x: halfW, y: halfH, kind: 'corner', bundle: corner });
+
+  // 右边
+  for (let i = 1; i <= hMid.count; i++) {
+    const y = halfH - (2 * halfH * i) / (hMid.count + 1);
+    positions.push({ x: halfW, y, kind: 'hMid', bundle: cloneBundle(hMid, 1) });
+  }
+  positions.push({ x: halfW, y: -halfH, kind: 'corner', bundle: corner });
+
+  // 底边
+  for (let i = 1; i <= bMid.count; i++) {
+    const x = halfW - (2 * halfW * i) / (bMid.count + 1);
     positions.push({ x, y: -halfH, kind: 'bMid', bundle: cloneBundle(bMid, 1) });
   }
+  positions.push({ x: -halfW, y: -halfH, kind: 'corner', bundle: corner });
+
+  // 左边
   for (let i = 1; i <= hMid.count; i++) {
     const y = -halfH + (2 * halfH * i) / (hMid.count + 1);
     positions.push({ x: -halfW, y, kind: 'hMid', bundle: cloneBundle(hMid, 1) });
-    positions.push({ x: halfW, y, kind: 'hMid', bundle: cloneBundle(hMid, 1) });
   }
 
   return positions;
+}
+
+function calcBarPositions(params: ColumnParams): ColumnBarPosition[] {
+  return calcBarPositionsForSection(params, { b: params.b, h: params.h });
 }
 
 /**
@@ -289,6 +316,8 @@ export function defaultColumn(): ColumnParams {
     h: 600,
     topB: 600,
     topH: 600,
+    topOffsetX: 0,
+    topOffsetZ: 0,
     Hn: 3600,
     upperHn: 3600,
     beamHeight: 600,

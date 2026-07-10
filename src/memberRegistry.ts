@@ -13,6 +13,9 @@ import { BeamParamContent } from './ui/param/BeamParamContent';
 import { ColumnParamContent } from './ui/param/ColumnParamContent';
 import { BeamDataContent } from './ui/data/BeamDataContent';
 import { ColumnDataContent } from './ui/data/ColumnDataContent';
+import { StairScene } from './scene/StairScene';
+import { StairParamContent } from './ui/param/StairParamContent';
+import { StairDataContent } from './ui/data/StairDataContent';
 
 export interface MemberEntry {
   /** 侧边栏和标题显示的名称 */
@@ -62,6 +65,104 @@ const registry: Record<string, MemberEntry> = {
     sceneComponent: ColumnScene,
     paramContentComponent: ColumnParamContent,
     dataContentComponent: ColumnDataContent,
+  },
+  AT: {
+    label: 'AT 型楼梯',
+    order: 5,
+    sceneComponent: StairScene,
+    paramContentComponent: StairParamContent,
+    dataContentComponent: StairDataContent,
+  },
+  BT: {
+    label: 'BT 型楼梯',
+    order: 5,
+    sceneComponent: StairScene,
+    paramContentComponent: StairParamContent,
+    dataContentComponent: StairDataContent,
+  },
+  CT: {
+    label: 'CT 型楼梯',
+    order: 5,
+    sceneComponent: StairScene,
+    paramContentComponent: StairParamContent,
+    dataContentComponent: StairDataContent,
+  },
+  DT: {
+    label: 'DT 型楼梯',
+    order: 5,
+    sceneComponent: StairScene,
+    paramContentComponent: StairParamContent,
+    dataContentComponent: StairDataContent,
+  },
+  ET: {
+    label: 'ET 型楼梯',
+    order: 5,
+    sceneComponent: StairScene,
+    paramContentComponent: StairParamContent,
+    dataContentComponent: StairDataContent,
+  },
+  FT: {
+    label: 'FT 型楼梯',
+    order: 5,
+    sceneComponent: StairScene,
+    paramContentComponent: StairParamContent,
+    dataContentComponent: StairDataContent,
+  },
+  GT: {
+    label: 'GT 型楼梯',
+    order: 5,
+    sceneComponent: StairScene,
+    paramContentComponent: StairParamContent,
+    dataContentComponent: StairDataContent,
+  },
+  ATa: {
+    label: 'ATa 型楼梯',
+    order: 5,
+    sceneComponent: StairScene,
+    paramContentComponent: StairParamContent,
+    dataContentComponent: StairDataContent,
+  },
+  ATb: {
+    label: 'ATb 型楼梯',
+    order: 5,
+    sceneComponent: StairScene,
+    paramContentComponent: StairParamContent,
+    dataContentComponent: StairDataContent,
+  },
+  ATc: {
+    label: 'ATc 型楼梯',
+    order: 5,
+    sceneComponent: StairScene,
+    paramContentComponent: StairParamContent,
+    dataContentComponent: StairDataContent,
+  },
+  BTb: {
+    label: 'BTb 型楼梯',
+    order: 5,
+    sceneComponent: StairScene,
+    paramContentComponent: StairParamContent,
+    dataContentComponent: StairDataContent,
+  },
+  CTa: {
+    label: 'CTa 型楼梯',
+    order: 5,
+    sceneComponent: StairScene,
+    paramContentComponent: StairParamContent,
+    dataContentComponent: StairDataContent,
+  },
+  CTb: {
+    label: 'CTb 型楼梯',
+    order: 5,
+    sceneComponent: StairScene,
+    paramContentComponent: StairParamContent,
+    dataContentComponent: StairDataContent,
+  },
+  DTb: {
+    label: 'DTb 型楼梯',
+    order: 5,
+    sceneComponent: StairScene,
+    paramContentComponent: StairParamContent,
+    dataContentComponent: StairDataContent,
   },
 };
 
