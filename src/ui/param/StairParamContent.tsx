@@ -1,5 +1,6 @@
 import { useStairStore } from '../../store/stairStore';
 import { useMemberStore } from '../../store/memberStore';
+import { deriveStair } from '../../domain/at/derive';
 import type { StairParams, StairTopAnchorMode, StairRebarSpec } from '../../domain/at/types';
 import { NumField } from '../fields/NumField';
 import { SelectField } from '../fields/SelectField';
@@ -11,6 +12,10 @@ const ANCHOR_MODES: { value: StairTopAnchorMode; label: string }[] = [
 ];
 
 const CONCRETE_OPTIONS: string[] = ['C25', 'C30', 'C35', 'C40', 'C45', 'C50'];
+
+function formatCheckValue(value: number | undefined) {
+  return typeof value === 'number' && Number.isFinite(value) ? `${Math.round(value)} mm` : '无效值';
+}
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -76,6 +81,7 @@ export function StairParamContent() {
   const setParams = useStairStore((s) => s.setParams);
   const activeType = useMemberStore((s) => s.activeType);
   const update = (patch: Partial<StairParams>) => setParams((p) => ({ ...p, ...patch }));
+  const failedChecks = deriveStair(params).checks.filter((check) => !check.ok);
 
   return (
     <div className="flex-1 overflow-y-auto flex flex-col divide-y divide-white/10">
@@ -93,9 +99,15 @@ export function StairParamContent() {
           <NumField label="水平投影长度 ln" value={params.ln} onChange={(v) => update({ ln: v })} unit="mm" min={1000} />
           <NumField label="踏步段总高度 Hs" value={params.Hs} onChange={(v) => update({ Hs: v })} unit="mm" min={500} />
           <NumField label="踏步级数" value={params.stepCount} onChange={(v) => update({ stepCount: Math.max(2, Math.round(v)) })} unit="级" min={2} step={1} />
-          <NumField label="梯板厚度 h" value={params.h} onChange={(v) => update({ h: Math.max(80, v) })} unit="mm" min={80} />
+          <NumField label="梯板厚度 h" value={params.h} onChange={(v) => update({ h: Number.isFinite(v) ? Math.max(0, v) : params.h })} unit="mm" min={0} />
           <NumField label="梯板宽度 b" value={params.b} onChange={(v) => update({ b: Math.max(600, v) })} unit="mm" min={600} />
-          <NumField label="保护层 c" value={params.cover} onChange={(v) => update({ cover: Math.max(10, v) })} unit="mm" min={10} />
+          <SelectField
+            label="保护层 c"
+            value={params.cover}
+            options={[15, 20, 25, 30, 40]}
+            onChange={(v) => update({ cover: v })}
+            fmt={(v) => `${v} mm`}
+          />
         </Section>
 
         <Section title="材料">
@@ -110,15 +122,44 @@ export function StairParamContent() {
         <Section title="梯梁支座">
           <NumField label="低端梯梁宽" value={params.lowBeam.width} onChange={(v) => update({ lowBeam: { ...params.lowBeam, width: Math.max(150, v) } })} unit="mm" min={150} />
           <NumField label="低端梯梁高" value={params.lowBeam.height} onChange={(v) => update({ lowBeam: { ...params.lowBeam, height: Math.max(200, v) } })} unit="mm" min={200} />
+          <NumField label="低端梯梁横向长度" value={params.lowBeam.length} onChange={(v) => update({ lowBeam: { ...params.lowBeam, length: Math.max(1, v) } })} unit="mm" min={1} step={50} />
           <NumField label="高端梯梁宽" value={params.highBeam.width} onChange={(v) => update({ highBeam: { ...params.highBeam, width: Math.max(150, v) } })} unit="mm" min={150} />
           <NumField label="高端梯梁高" value={params.highBeam.height} onChange={(v) => update({ highBeam: { ...params.highBeam, height: Math.max(200, v) } })} unit="mm" min={200} />
+          <NumField label="高端梯梁横向长度" value={params.highBeam.length} onChange={(v) => update({ highBeam: { ...params.highBeam, length: Math.max(1, v) } })} unit="mm" min={1} step={50} />
+          {failedChecks.length > 0 && (
+            <div className="space-y-2 pt-1">
+              <h5 className="text-[10px] font-semibold text-on-surface-variant">校核提示</h5>
+              {failedChecks.map((check, index) => {
+                const isError = check.severity === 'error';
+                return (
+                  <div
+                    key={`${check.code}-${check.end ?? index}`}
+                    className={`border px-3 py-2 ${isError
+                      ? 'border-red-500/30 bg-red-500/10 text-red-300'
+                      : 'border-amber-400/30 bg-amber-400/10 text-amber-200'}`}
+                  >
+                    <div className="flex items-start gap-2 text-[11px] leading-4">
+                      <span className="shrink-0 font-semibold">{isError ? '错误' : '警告'}</span>
+                      <span>{check.message}</span>
+                    </div>
+                    {(check.required !== undefined || check.provided !== undefined) && (
+                      <div className="mt-1 flex flex-wrap gap-x-3 text-[10px] font-mono opacity-80">
+                        {check.required !== undefined && <span>要求: {formatCheckValue(check.required)}</span>}
+                        {check.provided !== undefined && <span>当前: {formatCheckValue(check.provided)}</span>}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </Section>
 
         <Section title="配筋">
           <RebarSpecEditor label="下部纵筋" value={params.bottomBar} onChange={(v) => update({ bottomBar: v })} />
           <RebarSpecEditor label="上部纵筋" value={params.topBar} onChange={(v) => update({ topBar: v })} />
           <RebarSpecEditor label="分布筋" value={params.distributionBar} onChange={(v) => update({ distributionBar: v })} />
-          <NumField label="上部纵筋跨内伸出" value={params.topExtend ?? Math.round(params.ln / 4)} onChange={(v) => update({ topExtend: Math.max(0, v) })} unit="mm" min={0} />
+          <NumField label="上部纵筋跨内水平投影（ln/4）" value={params.topExtend ?? Math.round(params.ln / 4)} onChange={(v) => update({ topExtend: Math.max(0, v) })} unit="mm" min={0} />
           <SelectField
             label="上部纵筋支座锚固"
             value={params.topAnchorMode ?? 'hinge'}
@@ -127,6 +168,7 @@ export function StairParamContent() {
             fmt={(v) => ANCHOR_MODES.find((m) => m.value === v)?.label ?? v}
           />
         </Section>
+
       </div>
     </div>
   );

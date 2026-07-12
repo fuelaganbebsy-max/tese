@@ -8,7 +8,7 @@ import { lazyWithReload } from './lazyWithReload';
 const App = lazyWithReload(() => import('./App'));
 
 // 仅在数据损坏（无法解析）时清除；版本迁移交由 zustand persist 的 migrate 处理
-['rebar-3d-beam', 'rebar-3d-column'].forEach((key) => {
+['rebar-3d-beam', 'rebar-3d-column', 'rebar-3d-stair'].forEach((key) => {
   try {
     const raw = localStorage.getItem(key);
     if (raw) JSON.parse(raw);

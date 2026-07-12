@@ -1,20 +1,17 @@
 import { useMemo, useState, useRef, useCallback } from 'react';
 import { useStairStore } from '../../store/stairStore';
 import { useMemberStore } from '../../store/memberStore';
-import { deriveStair } from '../../domain/at/derive';
-import { buildStairRebar } from '../../geometry/buildStairRebar';
+import { deriveStair, stairThicknessSegmentAtX } from '../../domain/at/derive';
+import {
+  deriveStairRebarLayout,
+  type StairPoint2,
+  type StairRebarLayout,
+} from '../../domain/at/rebarLayout';
+import { deriveStairQuantityRows } from '../../domain/at/quantities';
 import { RebarCutView } from '../RebarCutView';
 import type { StairParams } from '../../domain/at/types';
-import type { StairBarResult } from '../../geometry/buildStairRebar';
 
 const MARGIN = 42;
-const STROKE = {
-  concrete: '#94a3b8',
-  rebar: { bottom: '#facc15', top: '#facc15', distribution: '#3b82f6' },
-  axis: '#64748b',
-  text: '#e2e8f0',
-  dim: '#64748b',
-};
 
 /* ---------- 切换按钮 ---------- */
 function SlideToggle<T extends string>({ options, value, onChange }: {
@@ -44,44 +41,17 @@ function SlideToggle<T extends string>({ options, value, onChange }: {
   );
 }
 
-/* ---------- 钢筋工程量 / 下料简图 ---------- */
-interface RebarRow {
-  mark: string;
-  dia: number;
-  grade: string;
-  length: number;
-  qty: number;
-  note?: string;
-}
-
-function buildStairRows(params: StairParams, bars: StairBarResult[]): RebarRow[] {
-  const rows: RebarRow[] = [];
-  const groups = [
-    { mark: 'B', kind: 'bottom' as const, label: '下部纵筋' },
-    { mark: 'T', kind: 'top' as const, label: '上部纵筋' },
-    { mark: 'D', kind: 'distribution' as const, label: '分布筋' },
-  ];
-  for (const g of groups) {
-    const groupBars = bars.filter((b) => b.meta.kind === g.kind);
-    if (groupBars.length === 0) continue;
-    const spec = g.kind === 'bottom' ? params.bottomBar : g.kind === 'top' ? params.topBar : params.distributionBar;
-    const avgLen = Math.round(groupBars.reduce((s, b) => s + b.meta.length, 0) / groupBars.length);
-    rows.push({
-      mark: g.mark,
-      dia: spec.diameter,
-      grade: spec.grade,
-      length: avgLen,
-      qty: groupBars.length,
-      note: g.label,
-    });
-  }
-  return rows;
-}
+const STROKE = {
+  concrete: '#94a3b8',
+  rebar: { bottom: '#facc15', top: '#fb7185', distribution: '#3b82f6' },
+  axis: '#64748b',
+  text: '#e2e8f0',
+  dim: '#64748b',
+};
 
 function StairQuantitiesTable() {
   const params = useStairStore((s) => s.params);
-  const rebar = useMemo(() => buildStairRebar(params), [params]);
-  const rows = useMemo(() => buildStairRows(params, rebar.bars), [params, rebar]);
+  const rows = useMemo(() => deriveStairQuantityRows(params), [params]);
   const [tab, setTab] = useState<'bom' | 'cut'>('bom');
   const [expanded, setExpanded] = useState(false);
   const [size, setSize] = useState({ w: 500, h: 340 });
@@ -110,18 +80,14 @@ function StairQuantitiesTable() {
     window.addEventListener('mouseup', onUp);
   }, [size]);
 
-  const totalSteel = rows.reduce((s, r) => {
-    const wPerM = 0.00617 * r.dia * r.dia;
-    return s + (r.length / 1000) * r.qty * wPerM;
-  }, 0);
+  const totalSteel = rows.reduce((sum, row) => sum + row.weight, 0);
 
   const exportCsv = () => {
-    const header = '编号,等级,直径(mm),长度(m),数量,重量(kg),备注';
-    const body = rows.map((r) => {
-      const w = (r.length / 1000) * r.qty * 0.00617 * r.dia * r.dia;
-      return `${r.mark},${r.grade},${r.dia},${(r.length / 1000).toFixed(2)},${r.qty},${w.toFixed(1)},${r.note ?? ''}`;
-    });
-    const footer = `合计,,,,, ${totalSteel.toFixed(2)},`;
+    const header = '编号,名称,规格,单根长度(m),数量,总长度(m),重量(kg)';
+    const body = rows.map((row) => (
+      `${row.mark},${row.name},${row.spec},${(row.length / 1000).toFixed(3)},${row.quantity},${(row.totalLength / 1000).toFixed(3)},${row.weight.toFixed(2)}`
+    ));
+    const footer = `合计,,,,,,${totalSteel.toFixed(2)}`;
     const csv = '\uFEFF' + [header, ...body, footer].join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -183,25 +149,24 @@ function StairQuantitiesTable() {
                   </tr>
                 </thead>
                 <tbody className="font-label-numeric text-label-numeric text-[12px] text-on-surface font-mono">
-                  {rows.map((r, i) => {
-                    const wPerM = 0.00617 * r.dia * r.dia;
-                    const weight = (r.length / 1000) * r.qty * wPerM;
-                    return (
-                      <tr key={i} className="border-b border-white/[0.02] hover:bg-white/[0.04] transition-colors group">
-                        <td className="px-4 py-2 text-primary-fixed-dim font-mono">{r.mark}</td>
+                  {rows.map((row) => (
+                      <tr key={row.mark} className="border-b border-white/[0.02] hover:bg-white/[0.04] transition-colors group">
+                        <td className="px-4 py-2 text-primary-fixed-dim font-mono">
+                          <span className="block">{row.mark}</span>
+                          <span className="block text-[10px] text-on-surface-variant font-sans whitespace-nowrap">{row.name}</span>
+                        </td>
                         <td className="px-4 py-2 font-mono">
                           <span className="px-1.5 py-0.5 rounded bg-surface-container-highest border border-white/5 text-on-surface">
-                            {r.grade} ∅{r.dia}
+                            {row.spec}
                           </span>
                         </td>
-                        <td className="px-4 py-2 font-mono">{(r.length / 1000).toFixed(2)}m</td>
-                        <td className="px-4 py-2 font-mono">{r.qty}</td>
+                        <td className="px-4 py-2 font-mono">{(row.length / 1000).toFixed(3)}m</td>
+                        <td className="px-4 py-2 font-mono">{row.quantity}</td>
                         <td className="px-4 py-2 text-right group-hover:text-primary-fixed-dim transition-colors font-mono">
-                          {weight.toFixed(1)}
+                          {row.weight.toFixed(2)}
                         </td>
                       </tr>
-                    );
-                  })}
+                  ))}
                 </tbody>
               </table>
             </div>
@@ -216,12 +181,12 @@ function StairQuantitiesTable() {
   );
 }
 
-/* ---------- 顺着楼梯走向方向的剖切面 ---------- */
+/* ---------- 第 1-8 页纵剖面 / 第 2-8 页 1-1 横截面 ---------- */
 function StairSectionView() {
   const params = useStairStore((s) => s.params);
   const activeType = useMemberStore((s) => s.activeType);
   const derived = useMemo(() => deriveStair(params), [params]);
-  const rebar = useMemo(() => buildStairRebar(params), [params]);
+  const rebar = useMemo(() => deriveStairRebarLayout(params), [params]);
   const [size, setSize] = useState({ w: 420, h: 340 });
   const [anchor, setAnchor] = useState({ right: 16, bottom: 16 });
   const [zoom, setZoom] = useState(1);
@@ -234,19 +199,19 @@ function StairSectionView() {
 
   const toggleExpand = useCallback(() => {
     if (!expanded) {
-      const r = panelRef.current?.getBoundingClientRect();
-      if (r) setAnchor({ right: window.innerWidth - r.right, bottom: window.innerHeight - r.bottom });
+      const rect = panelRef.current?.getBoundingClientRect();
+      if (rect) setAnchor({ right: window.innerWidth - rect.right, bottom: window.innerHeight - rect.bottom });
     }
-    setExpanded((v) => !v);
+    setExpanded((value) => !value);
   }, [expanded]);
 
-  const onResizeStart = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    startRef.current = { x: e.clientX, y: e.clientY, w: size.w, h: size.h };
-    const onMove = (ev: MouseEvent) => {
+  const onResizeStart = useCallback((event: React.MouseEvent) => {
+    event.preventDefault();
+    startRef.current = { x: event.clientX, y: event.clientY, w: size.w, h: size.h };
+    const onMove = (moveEvent: MouseEvent) => {
       setSize({
-        w: Math.max(280, startRef.current.w + startRef.current.x - ev.clientX),
-        h: Math.max(200, startRef.current.h + startRef.current.y - ev.clientY),
+        w: Math.max(280, startRef.current.w + startRef.current.x - moveEvent.clientX),
+        h: Math.max(220, startRef.current.h + startRef.current.y - moveEvent.clientY),
       });
     };
     const onUp = () => {
@@ -257,93 +222,76 @@ function StairSectionView() {
     window.addEventListener('mouseup', onUp);
   }, [size]);
 
-  const onPanStart = useCallback((e: React.MouseEvent) => {
-    if (e.button !== 0) return;
-    e.preventDefault();
+  const onPanStart = useCallback((event: React.MouseEvent) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
     setDragging(true);
-    dragStartRef.current = { x: e.clientX, y: e.clientY, panX: pan.x, panY: pan.y };
+    dragStartRef.current = { x: event.clientX, y: event.clientY, panX: pan.x, panY: pan.y };
   }, [pan]);
 
-  const onPanMove = useCallback((e: React.MouseEvent) => {
+  const onPanMove = useCallback((event: React.MouseEvent) => {
     if (!dragging) return;
-    const dx = e.clientX - dragStartRef.current.x;
-    const dy = e.clientY - dragStartRef.current.y;
-    setPan({ x: dragStartRef.current.panX + dx, y: dragStartRef.current.panY + dy });
+    setPan({
+      x: dragStartRef.current.panX + event.clientX - dragStartRef.current.x,
+      y: dragStartRef.current.panY + event.clientY - dragStartRef.current.y,
+    });
   }, [dragging]);
 
   const onPanEnd = useCallback(() => setDragging(false), []);
-
-  const plotW = size.w - MARGIN * 2;
-  const plotH = size.h - MARGIN * 2;
   const layout = derived.layout;
-
-  const scale = useMemo(() => {
-    const xRange = params.ln + params.lowBeam.width + params.highBeam.width + 400;
-    const yRange = params.Hs + Math.max(params.lowBeam.height, params.highBeam.height) + 400;
-    return Math.min(plotW / xRange, plotH / yRange) * zoom;
-  }, [params, plotW, plotH, zoom]);
-
-  const originX = MARGIN + (plotW - (params.ln + params.lowBeam.width + params.highBeam.width) * scale) / 2 + params.lowBeam.width * scale;
-  const originY = MARGIN + plotH - (params.lowBeam.height + 100) * scale;
+  const plotW = Math.max(1, size.w - MARGIN * 2);
+  const plotH = Math.max(1, size.h - MARGIN * 2);
+  const longitudinalPoints = [
+    ...layout.concreteProfile,
+    ...rebar.bottom.points,
+    ...rebar.lowTop.points,
+    ...rebar.highTop.points,
+  ];
+  const xMin = Math.min(-params.lowBeam.width, ...longitudinalPoints.map((point) => point.x));
+  const xMax = Math.max(params.ln + params.highBeam.width, ...longitudinalPoints.map((point) => point.x));
+  const yMin = Math.min(layout.lowBeamBottomY, layout.highBeamBottomY, ...longitudinalPoints.map((point) => point.y));
+  const yMax = Math.max(layout.lowBeamTopY, layout.highBeamTopY, ...longitudinalPoints.map((point) => point.y));
+  const scale = Math.min(plotW / Math.max(1, xMax - xMin + 240), plotH / Math.max(1, yMax - yMin + 240));
+  const originX = MARGIN + (plotW - (xMax - xMin) * scale) / 2 - xMin * scale;
+  const originY = MARGIN + (plotH - (yMax - yMin) * scale) / 2 + yMax * scale;
   const toSvg = (x: number, y: number) => ({ x: originX + x * scale, y: originY - y * scale });
+  const polylinePath = (points: StairPoint2[], close = false) => points.map((point, index) => {
+    const svgPoint = toSvg(point.x, point.y);
+    return `${index === 0 ? 'M' : 'L'} ${svgPoint.x} ${svgPoint.y}`;
+  }).join(' ') + (close ? ' Z' : '');
 
-  const treadPts: { x: number; y: number }[] = [];
-  for (let i = 0; i < params.stepCount; i++) {
-    const x = i * layout.run;
-    const y = i * layout.rise;
-    if (i > 0) treadPts.push({ x, y });
-    if (i < params.stepCount - 1) treadPts.push({ x: x + layout.run, y });
-  }
-
-  const dx = params.h * layout.normal.x;
-  const dy = params.h * layout.normal.y;
-  const lowTop = toSvg(0, 0);
-  const highTop = toSvg(params.ln, params.Hs);
-  const lowBot = toSvg(dx, dy);
-  const highBot = toSvg(params.ln + dx, params.Hs + dy);
-
+  const lowDatum = toSvg(0, 0);
+  const highDatum = toSvg(params.ln, params.Hs);
   const lowBeamRect = {
     x: toSvg(-params.lowBeam.width, 0).x,
-    y: toSvg(0, layout.lowBeamBottomY).y,
+    y: toSvg(0, layout.lowBeamTopY).y,
     w: params.lowBeam.width * scale,
     h: params.lowBeam.height * scale,
   };
   const highBeamRect = {
     x: toSvg(params.ln, 0).x,
-    y: toSvg(0, layout.highBeamBottomY).y,
+    y: toSvg(0, layout.highBeamTopY).y,
     w: params.highBeam.width * scale,
     h: params.highBeam.height * scale,
   };
-
-  const slabPath = [
-    `M ${lowTop.x} ${lowTop.y}`,
-    ...treadPts.map((p) => { const s = toSvg(p.x, p.y); return `L ${s.x} ${s.y}`; }),
-    `L ${highTop.x} ${highTop.y}`,
-    `L ${highBot.x} ${highBot.y}`,
-    `L ${lowBot.x} ${lowBot.y}`,
-    'Z',
-  ].join(' ');
-
-  const rebarPath = (kind: 'bottom' | 'top', limit?: number) => rebar.bars
-    .filter((b) => b.meta.kind === kind)
-    .slice(0, limit ?? Infinity)
-    .map((b) => {
-      const pts = b.points.map((p) => toSvg(p.x, p.y));
-      return `M ${pts[0].x} ${pts[0].y} ` + pts.slice(1).map((p) => `L ${p.x} ${p.y}`).join(' ');
-    })
-    .join(' ');
-
-  const bottomBarPath = rebarPath('bottom', 1);
-  const topBarPaths = rebarPath('top', 2);
-
-  const dimLine = (x1: number, y1: number, x2: number, y2: number) => (
-    <g>
-      <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={STROKE.dim} strokeWidth={0.6} markerEnd="url(#arrow)" markerStart="url(#arrow)" />
-    </g>
-  );
-
-  const labelY = lowTop.y + 30;
+  const labelY = toSvg(0, yMin).y + 18;
   const dimHsX = highBeamRect.x + highBeamRect.w + 18;
+  const distributionRadius = Math.max(1.5, params.distributionBar.diameter * scale / 2);
+  const slabMidX = params.ln / 2;
+  const treadIndex = Math.min(layout.treadCount - 1, Math.max(0, Math.floor(slabMidX / layout.run)));
+  const slabDimX = (treadIndex + 0.5) * layout.run;
+  const slabThickness = stairThicknessSegmentAtX(layout, params.h, slabDimX);
+  const slabRootP = toSvg(slabThickness.root.x, slabThickness.root.y);
+  const slabBottomP = toSvg(slabThickness.bottom.x, slabThickness.bottom.y);
+  const slabDimMid = { x: (slabRootP.x + slabBottomP.x) / 2, y: (slabRootP.y + slabBottomP.y) / 2 };
+  const textGapWorld = 40 / scale;
+  const slabTextP = toSvg(
+    slabThickness.bottom.x + layout.concretePitch.normal.x * textGapWorld,
+    slabThickness.bottom.y + layout.concretePitch.normal.y * textGapWorld,
+  );
+  const dimLine = (x1: number, y1: number, x2: number, y2: number) => (
+    <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={STROKE.dim} strokeWidth={0.7} markerEnd="url(#stair-arrow)" markerStart="url(#stair-arrow)" />
+  );
 
   return (
     <>
@@ -361,46 +309,56 @@ function StairSectionView() {
           />
         )}
         <div
-          className="px-4 py-2 border-b border-white/5 bg-surface-container-highest/30 flex justify-between items-center shrink-0 select-none"
-          style={{ cursor: 'pointer' }}
+          className="px-3 py-2 border-b border-white/5 bg-surface-container-highest/30 flex justify-between items-center gap-2 shrink-0 select-none"
           onDoubleClick={toggleExpand}
           title={expanded ? '双击还原' : '双击放大'}
         >
-          <h3 className="font-body-md text-body-md font-medium text-on-surface font-bold">
-            {activeType} 顺着楼梯走向方向的剖切面
-          </h3>
+          <span className="text-[10px] text-on-surface-variant font-mono whitespace-nowrap">纵向配筋 · {activeType}</span>
         </div>
         <div
-          className="flex-1 p-4 flex flex-col items-center justify-center relative bg-surface-container-lowest gap-2 overflow-hidden select-none"
+          className="flex-1 p-2 flex items-center justify-center relative bg-surface-container-lowest overflow-hidden select-none"
           onMouseDown={onPanStart}
           onMouseMove={onPanMove}
           onMouseUp={onPanEnd}
           onMouseLeave={onPanEnd}
-          onWheel={(e) => {
-            e.preventDefault();
-            const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
-            setZoom((z) => Math.min(5, Math.max(0.5, z * factor)));
+          onWheel={(event) => {
+            event.preventDefault();
+            const factor = event.deltaY < 0 ? 1.12 : 1 / 1.12;
+            setZoom((value) => Math.min(5, Math.max(0.5, value * factor)));
           }}
           style={{ cursor: dragging ? 'grabbing' : 'grab' }}
         >
-          <div style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: 'center center', transition: dragging ? 'none' : 'transform 0.05s' }}>
-            <svg className="w-full h-full" style={{ minWidth: size.w, minHeight: size.h - 40 }}>
-              <rect x={lowBeamRect.x} y={lowBeamRect.y} width={lowBeamRect.w} height={lowBeamRect.h} fill={STROKE.concrete} fillOpacity="0.25" stroke={STROKE.concrete} />
-            <rect x={highBeamRect.x} y={highBeamRect.y} width={highBeamRect.w} height={highBeamRect.h} fill={STROKE.concrete} fillOpacity="0.25" stroke={STROKE.concrete} />
-            <path d={slabPath} fill={STROKE.concrete} fillOpacity="0.35" stroke={STROKE.concrete} strokeWidth={1.5} />
-            <line x1={lowTop.x} y1={lowTop.y} x2={highTop.x} y2={highTop.y} stroke={STROKE.axis} strokeWidth={0.5} strokeDasharray="4 4" />
-            {bottomBarPath && <path d={bottomBarPath} fill="none" stroke={STROKE.rebar.bottom} strokeWidth={2.2} />}
-            {topBarPaths && <path d={topBarPaths} fill="none" stroke={STROKE.rebar.top} strokeWidth={2.2} />}
-            {dimLine(lowTop.x, labelY, highTop.x, labelY)}
-            <text x={(lowTop.x + highTop.x) / 2} y={labelY + 14} textAnchor="middle" fill={STROKE.text} fontSize={10}>ln={params.ln}</text>
-            {dimLine(dimHsX, lowTop.y, dimHsX, highTop.y)}
-            <text x={dimHsX + 8} y={(lowTop.y + highTop.y) / 2} fill={STROKE.text} fontSize={10} transform={`rotate(90 ${dimHsX + 8} ${(lowTop.y + highTop.y) / 2})`}>Hs={params.Hs}</text>
-            <defs>
-              <marker id="arrow" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
-                <path d="M0,1 L6,3 L0,5 L0,3.5 L0,2.5 Z" fill={STROKE.dim} />
-              </marker>
-            </defs>
-          </svg>
+          <div className="w-full h-full" style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: 'center center', transition: dragging ? 'none' : 'transform 0.05s' }}>
+            <svg viewBox={`0 0 ${size.w} ${size.h}`} className="w-full h-full" overflow="visible" role="img" aria-label="AT 楼梯纵向配筋剖面">
+                <rect {...lowBeamRect} fill="#cbd5e1" fillOpacity="1" stroke="#475569" strokeWidth={2} />
+                <text x={lowBeamRect.x + lowBeamRect.w / 2} y={lowBeamRect.y + lowBeamRect.h / 2} fill="#1e293b" fontSize={10} textAnchor="middle" dominantBaseline="middle">低梯梁</text>
+                <rect {...highBeamRect} fill="#cbd5e1" fillOpacity="1" stroke="#475569" strokeWidth={2} />
+                <text x={highBeamRect.x + highBeamRect.w / 2} y={highBeamRect.y + highBeamRect.h / 2} fill="#1e293b" fontSize={10} textAnchor="middle" dominantBaseline="middle">高梯梁</text>
+                <path d={polylinePath(layout.concreteProfile, true)} fill={STROKE.concrete} fillOpacity="0.35" stroke={STROKE.concrete} strokeWidth={1.5} />
+                <line x1={lowDatum.x} y1={lowDatum.y} x2={highDatum.x} y2={highDatum.y} stroke={STROKE.axis} strokeWidth={0.5} strokeDasharray="4 4" />
+                <path d={polylinePath(rebar.bottom.points)} fill="none" stroke={STROKE.rebar.bottom} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
+                <path d={polylinePath(rebar.lowTop.points)} fill="none" stroke={STROKE.rebar.top} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
+                <path d={polylinePath(rebar.highTop.points)} fill="none" stroke={STROKE.rebar.top} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
+                {[...rebar.topDistributionStations, ...rebar.bottomDistributionStations].map((station, index) => {
+                  const point = toSvg(station.x, station.y);
+                  return <circle key={`${station.s}-${index}`} cx={point.x} cy={point.y} r={distributionRadius} fill={STROKE.rebar.distribution} />;
+                })}
+                {dimLine(lowDatum.x, labelY, highDatum.x, labelY)}
+                <text x={(lowDatum.x + highDatum.x) / 2} y={labelY + 14} textAnchor="middle" fill={STROKE.text} fontSize={10}>ln={params.ln}</text>
+                {dimLine(dimHsX, lowDatum.y, dimHsX, highDatum.y)}
+                <text x={dimHsX + 8} y={(lowDatum.y + highDatum.y) / 2} fill={STROKE.text} fontSize={10} transform={`rotate(90 ${dimHsX + 8} ${(lowDatum.y + highDatum.y) / 2})`} textAnchor="middle">Hs={params.Hs}</text>
+                <line x1={slabRootP.x} y1={slabRootP.y} x2={slabBottomP.x} y2={slabBottomP.y} stroke={STROKE.dim} strokeWidth={0.7} markerStart="url(#stair-tick)" markerEnd="url(#stair-tick)" />
+                <line x1={slabDimMid.x} y1={slabDimMid.y} x2={slabTextP.x} y2={slabTextP.y} stroke={STROKE.dim} strokeWidth={0.7} />
+                <text x={slabTextP.x} y={slabTextP.y - 8} fill={STROKE.text} fontSize={10} textAnchor="middle" dominantBaseline="middle">h={params.h}</text>
+                <defs>
+                  <marker id="stair-arrow" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto-start-reverse">
+                    <path d="M0,1 L6,3 L0,5 Z" fill={STROKE.dim} />
+                  </marker>
+                  <marker id="stair-tick" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
+                    <line x1="1" y1="5" x2="5" y2="1" stroke={STROKE.dim} strokeWidth={1.2} />
+                  </marker>
+                </defs>
+              </svg>
           </div>
         </div>
       </div>

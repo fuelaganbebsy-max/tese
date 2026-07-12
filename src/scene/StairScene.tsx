@@ -21,25 +21,35 @@ function stairBounds(params: StairParams) {
   const maxX = layout.highBeamCenterX + params.highBeam.width / 2 + 200;
   const minY = Math.min(layout.lowBeamBottomY, layout.highBeamBottomY) - 200;
   const maxY = params.Hs + Math.max(params.lowBeam.height, params.highBeam.height) + 200;
-  const size = Math.max(maxX - minX, maxY - minY, params.b + 400);
+  const transverseLength = Math.max(params.b, params.lowBeam.length, params.highBeam.length);
+  const size = Math.max(maxX - minX, maxY - minY, transverseLength + 400);
   return { cx: (minX + maxX) / 2, cy: (minY + maxY) / 2, cz: 0, size };
 }
 
 // ─── 混凝土 ──────────────────────────────────────────────
 function StairConcrete({ params, show }: { params: StairParams; show: boolean }) {
-  const { slabGeometry, lowBeamGeometry, highBeamGeometry } = useMemo(
+  const concrete = useMemo(
     () => buildStairConcrete(params),
     [params],
   );
+  useEffect(() => () => {
+    concrete.slabGeometry.dispose();
+    concrete.lowBeamGeometry.dispose();
+    concrete.highBeamGeometry.dispose();
+  }, [concrete]);
+  const { slabGeometry, lowBeamGeometry, highBeamGeometry } = concrete;
   if (!show) return null;
-  const mat = (
+  const slabMat = (
     <meshStandardMaterial color="#9ca3af" transparent opacity={0.35} depthWrite={false} roughness={0.9} metalness={0.05} envMapIntensity={0.3} />
+  );
+  const beamMat = (
+    <meshStandardMaterial color="#9ca3af" transparent opacity={0.7} depthWrite={false} roughness={0.9} metalness={0.05} envMapIntensity={0.3} />
   );
   return (
     <>
-      <mesh geometry={slabGeometry}>{mat}</mesh>
-      <mesh geometry={lowBeamGeometry}>{mat}</mesh>
-      <mesh geometry={highBeamGeometry}>{mat}</mesh>
+      <mesh geometry={slabGeometry}>{slabMat}</mesh>
+      <mesh geometry={lowBeamGeometry}>{beamMat}</mesh>
+      <mesh geometry={highBeamGeometry}>{beamMat}</mesh>
     </>
   );
 }
@@ -84,6 +94,9 @@ function StairPickableBar({
 // ─── 全部配筋 ────────────────────────────────────────────
 function StairRebars({ params, show }: { params: StairParams; show: boolean }) {
   const result = useMemo(() => buildStairRebar(params), [params]);
+  useEffect(() => () => {
+    result.bars.forEach((bar) => bar.geometry.dispose());
+  }, [result]);
   if (!show) return null;
   return (
     <>
@@ -117,7 +130,7 @@ function StairDimLabels({ params }: { params: StairParams }) {
     <group>
       {label(`ln=${params.ln}`, [params.ln / 2, layout.lowBeamBottomY - 150, 0])}
       {label(`Hs=${params.Hs}`, [params.ln + 180, params.Hs / 2, 0])}
-      {label(`h=${params.h}`, [params.ln + 120, params.Hs + layout.normal.y * params.h / 2, 0])}
+      {label(`h=${params.h}`, [params.ln + 120, params.Hs + layout.concretePitch.normal.y * params.h / 2, 0])}
       {label(`b=${params.b}`, [params.ln / 2, params.Hs + 120, params.b / 2 + 100])}
     </group>
   );
@@ -132,8 +145,7 @@ function CameraController({ center, size }: { center: [number, number, number]; 
   useEffect(() => {
     if (!cmd) return;
     const target = new THREE.Vector3(...center);
-    const dist = size * 1.3;
-    const pos = new THREE.Vector3(dist * 0.7, center[1] + dist * 0.35, dist * 0.9);
+    const pos = new THREE.Vector3(-0.75 * size, center[1] + size * 0.35, size * 0.95);
     const startPos = camera.position.clone();
     const duration = 600;
     const startTime = performance.now();
@@ -165,7 +177,7 @@ export function StairScene() {
 
   return (
     <Canvas
-      camera={{ position: [-size * 0.8, cy + size * 0.45, size * 1.05], fov: 30, near: 1, far: size * 5 }}
+      camera={{ position: [-0.75 * size, cy + size * 0.35, size * 0.95], fov: 30, near: 1, far: size * 5 }}
       gl={{ antialias: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.2 }}
       className="w-full h-full"
       onPointerMissed={() => useSelectionStore.getState().clear()}

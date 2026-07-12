@@ -37,7 +37,7 @@ export function ViewportHud() {
   const stirrupCount = isBeam
     ? beamD.spans.reduce((s, sp) => s + sp.stirrupXs.length, 0)
     : isStair
-    ? stairD.bottomBarCount + stairD.topBarCount * 2 + stairD.distributionBarCount * 2
+    ? stairD.totalBarCount
     : colD.stirrupYs.length;
 
   const dimLabel = isBeam

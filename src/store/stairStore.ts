@@ -11,6 +11,11 @@ interface ViewState {
   sectionCutX: number;
 }
 
+interface StairPersistedState {
+  params: StairParams;
+  view: ViewState;
+}
+
 interface UiState {
   sideNavCollapsed: boolean;
   inspectorCollapsed: boolean;
@@ -19,6 +24,87 @@ interface UiState {
 
 type CameraCommand = 'reset' | null;
 const MAX_HISTORY = 20;
+
+const defaultStairView = (): ViewState => ({
+  showConcrete: true,
+  showRebar: true,
+  showAnnotations: true,
+  showSectionCut: false,
+  sectionCutX: 0.5,
+});
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isFinitePositive(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0;
+}
+
+function isUsableStairParams(params: StairParams): boolean {
+  const validBeam = (beam: StairParams['lowBeam']) => (
+    isFinitePositive(beam.width)
+    && isFinitePositive(beam.height)
+    && isFinitePositive(beam.length)
+  );
+  const validRebar = (rebar: StairParams['bottomBar']) => (
+    ['HPB300', 'HRB400', 'HRB500'].includes(rebar.grade)
+    && isFinitePositive(rebar.diameter)
+    && isFinitePositive(rebar.spacing)
+  );
+
+  return [params.ln, params.Hs, params.h, params.b, params.cover].every(isFinitePositive)
+    && Number.isInteger(params.stepCount)
+    && params.stepCount >= 2
+    && ['C25', 'C30', 'C35', 'C40', 'C45', 'C50'].includes(params.concrete)
+    && [1, 2, 3, 4].includes(params.seismic)
+    && validBeam(params.lowBeam)
+    && validBeam(params.highBeam)
+    && validRebar(params.bottomBar)
+    && validRebar(params.topBar)
+    && validRebar(params.distributionBar)
+    && (params.topExtend === undefined || (
+      typeof params.topExtend === 'number'
+      && Number.isFinite(params.topExtend)
+      && params.topExtend >= 0
+    ))
+    && (params.topAnchorMode === undefined || ['hinge', 'full'].includes(params.topAnchorMode));
+}
+
+function normalizeStairView(input: unknown): ViewState {
+  const defaults = defaultStairView();
+  const view = isRecord(input) ? input : {};
+  const booleanValue = (key: keyof Pick<ViewState, 'showConcrete' | 'showRebar' | 'showAnnotations' | 'showSectionCut'>) => (
+    typeof view[key] === 'boolean' ? view[key] as boolean : defaults[key]
+  );
+  const sectionCutX = typeof view.sectionCutX === 'number'
+    && Number.isFinite(view.sectionCutX)
+    && view.sectionCutX >= 0
+    && view.sectionCutX <= 1
+    ? view.sectionCutX
+    : defaults.sectionCutX;
+
+  return {
+    showConcrete: booleanValue('showConcrete'),
+    showRebar: booleanValue('showRebar'),
+    showAnnotations: booleanValue('showAnnotations'),
+    showSectionCut: booleanValue('showSectionCut'),
+    sectionCutX,
+  };
+}
+
+export function migrateStairPersistedState(persisted: unknown, _version: number): StairPersistedState {
+  try {
+    const state = isRecord(persisted) ? persisted : {};
+    const normalizedParams = normalizeStairParams(state.params);
+    return {
+      params: isUsableStairParams(normalizedParams) ? normalizedParams : defaultStair(),
+      view: normalizeStairView(state.view),
+    };
+  } catch {
+    return { params: defaultStair(), view: defaultStairView() };
+  }
+}
 
 interface StairStore {
   params: StairParams;
@@ -41,7 +127,7 @@ interface StairStore {
 export const useStairStore = create<StairStore>()(persist(
   (set, get) => ({
     params: defaultStair(),
-    view: { showConcrete: true, showRebar: true, showAnnotations: true, showSectionCut: false, sectionCutX: 0.5 },
+    view: defaultStairView(),
     ui: { sideNavCollapsed: false, inspectorCollapsed: false, dataPanelCollapsed: false },
     cameraCommand: null,
     _history: [],
@@ -81,21 +167,8 @@ export const useStairStore = create<StairStore>()(persist(
   }),
   {
     name: 'rebar-3d-stair',
-    version: 1,
+    version: 2,
     partialize: (state) => ({ params: state.params, view: state.view }),
-    migrate: (persisted: any) => {
-      try {
-        if (persisted?.view) {
-          persisted.view.showSectionCut = persisted.view.showSectionCut ?? false;
-          persisted.view.sectionCutX = persisted.view.sectionCutX ?? 0.5;
-        }
-        if (persisted?.params) {
-          persisted.params = normalizeStairParams(persisted.params);
-        }
-        return persisted;
-      } catch {
-        return undefined;
-      }
-    },
+    migrate: migrateStairPersistedState,
   },
 ));

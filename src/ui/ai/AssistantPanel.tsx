@@ -7,6 +7,7 @@ import { SuggestedQuestions } from './SuggestedQuestions';
 import { getProvider } from './providers';
 import { useBeamStore } from '../../store/beamStore';
 import { useColumnStore } from '../../store/columnStore';
+import { useStairStore } from '../../store/stairStore';
 import { useMemberStore } from '../../store/memberStore';
 import { MEMBER_LABELS } from '../../config';
 import { buildAgentContext } from './agentTools';
@@ -36,6 +37,7 @@ export default function AssistantPanel() {
   const lastGuardrailError = useAiStore((s) => s.lastGuardrailError);
   const beamParams = useBeamStore((s) => s.params);
   const columnParams = useColumnStore((s) => s.params);
+  const stairParams = useStairStore((s) => s.params);
   const activeType = useMemberStore((s) => s.activeType);
 
   const [showClearConfirm, setShowClearConfirm] = useState(false);
@@ -84,6 +86,7 @@ export default function AssistantPanel() {
         memberLabel: MEMBER_LABELS[activeType],
         beamParams,
         columnParams,
+        stairParams,
       });
       const systemPrompt = buildSystemPrompt(context);
       let fullText = '';

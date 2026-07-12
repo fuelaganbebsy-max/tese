@@ -20,6 +20,8 @@ export interface StairBeamSpec {
   width: number;
   /** 梁高 (mm) */
   height: number;
+  /** 垂直于梯板走向、横跨梯板的梁长 (mm) */
+  length: number;
 }
 
 export interface StairParams {

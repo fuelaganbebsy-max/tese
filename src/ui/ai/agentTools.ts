@@ -1,3 +1,6 @@
+import { deriveStair } from '../../domain/at/derive';
+import type { StairParams, StairRebarSpec } from '../../domain/at/types';
+import { lab } from '../../domain/codes/22G101-stair';
 import { derive as deriveBeam } from '../../domain/kl/derive';
 import type { BeamParams, RebarBundle, StirrupSpec } from '../../domain/kl/types';
 import { deriveColumn } from '../../domain/kz/derive';
@@ -22,7 +25,15 @@ export type AgentContext =
       toolResults: AgentToolResult[];
     }
   | {
-      memberType: MemberType;
+      memberType: Extract<MemberType, 'AT'>;
+      memberLabel: string;
+      atlas: '22G101-2';
+      params: StairParams;
+      derived: ReturnType<typeof deriveStair>;
+      toolResults: AgentToolResult[];
+    }
+  | {
+      memberType: Exclude<MemberType, 'KL' | 'L' | 'WKL' | 'XL' | 'KZ' | 'AT'>;
       memberLabel: string;
       atlas: '22G101-1' | '22G101-2' | '22G101-3' | 'unknown';
       params: null;
@@ -47,6 +58,10 @@ export function formatBundle(bundle?: RebarBundle): string {
 function formatStirrup(stirrup: StirrupSpec): string {
   const grade = stirrup.grade.replace('HRB', 'C').replace('HPB', 'A');
   return `${grade}${stirrup.diameter}@${stirrup.spacingDense}/${stirrup.spacingSparse}(${stirrup.legs})`;
+}
+
+function formatStairRebar(spec: StairRebarSpec): string {
+  return `${spec.grade} ⌀${spec.diameter} @${spec.spacing}`;
 }
 
 function enabledHaunches(params: BeamParams): string[] {
@@ -168,13 +183,81 @@ function createColumnToolResults(params: ColumnParams, derived: ReturnType<typeo
   ];
 }
 
+const STAIR_SOURCE_NOTE =
+  '官方事实边界：22G101-2 第1-8页用于AT型楼梯几何与支承关系，第2-8页用于梯板配筋及锚固构造。' +
+  '项目渲染选择：当前模型未建平台板，采用第2-8页实线所示的梯梁内弯折方案；该选择不代表图集仅允许这一种做法。';
+
+function createStairToolResults(params: StairParams, derived: ReturnType<typeof deriveStair>): AgentToolResult[] {
+  const topChecks = derived.checks.filter((check) => check.code === 'top-anchor');
+  const providedByEnd = (checks: typeof topChecks) => Object.fromEntries(
+    checks.map((check) => [check.end, check.provided === undefined ? null : `${Math.round(check.provided)}mm`]),
+  );
+
+  return [
+    {
+      tool: 'summarize_current_stair_geometry',
+      title: '当前AT楼梯第1-8页几何摘要',
+      data: {
+        sourcePage: '22G101-2 第1-8页',
+        flight: {
+          ln: `${params.ln}mm`,
+          Hs: `${params.Hs}mm`,
+          stepCount: params.stepCount,
+          treadCount: derived.layout.treadCount,
+          rise: `${Math.round(derived.layout.rise)}mm`,
+          run: `${Math.round(derived.layout.run)}mm`,
+          slantLength: `${Math.round(derived.layout.slantLength)}mm`,
+          slabThickness: `${params.h}mm`,
+          stairWidth: `${params.b}mm`,
+        },
+        supports: {
+          lowBeam: `${params.lowBeam.width}x${params.lowBeam.height}mm, 横向长度${params.lowBeam.length}mm`,
+          highBeam: `${params.highBeam.width}x${params.highBeam.height}mm, 横向长度${params.highBeam.length}mm`,
+        },
+      },
+      note: STAIR_SOURCE_NOTE,
+    },
+    {
+      tool: 'calculate_stair_anchor_checks',
+      title: '当前AT楼梯第2-8页配筋与锚固校核',
+      data: {
+        sourcePage: '22G101-2 第2-8页',
+        barSpecs: {
+          bottom: formatStairRebar(params.bottomBar),
+          top: formatStairRebar(params.topBar),
+          distribution: formatStairRebar(params.distributionBar),
+        },
+        top: {
+          anchorMode: params.topAnchorMode ?? 'hinge',
+          rule: (params.topAnchorMode ?? 'hinge') === 'hinge' ? '0.35lab' : '0.6lab',
+          lab: `${lab(params.topBar.grade, params.topBar.diameter, params.concrete)}mm`,
+          required: `${derived.topAnchor}mm`,
+          provided: providedByEnd(topChecks),
+          ok: topChecks.every((check) => check.ok),
+        },
+        bottom: {
+          rule: '直锚到梁中线',
+          required: `${0}mm`,
+          provided: {
+            low: `${Math.round(params.lowBeam.width / 2)}mm`,
+            high: `${Math.round(params.highBeam.width / 2)}mm`,
+          },
+          ok: true,
+        },
+      },
+      note: STAIR_SOURCE_NOTE,
+    },
+  ];
+}
+
 export function buildAgentContext(input: {
   memberType: MemberType;
   memberLabel: string;
   beamParams: BeamParams;
   columnParams: ColumnParams;
+  stairParams: StairParams;
 }): AgentContext {
-  const { memberType, memberLabel, beamParams, columnParams } = input;
+  const { memberType, memberLabel, beamParams, columnParams, stairParams } = input;
 
   if (BEAM_TYPES.has(memberType)) {
     const derived = deriveBeam(beamParams);
@@ -200,10 +283,22 @@ export function buildAgentContext(input: {
     };
   }
 
+  if (memberType === 'AT') {
+    const derived = deriveStair(stairParams);
+    return {
+      memberType,
+      memberLabel,
+      atlas: '22G101-2',
+      params: stairParams,
+      derived,
+      toolResults: createStairToolResults(stairParams, derived),
+    };
+  }
+
   return {
-    memberType,
+    memberType: memberType as Exclude<MemberType, 'KL' | 'L' | 'WKL' | 'XL' | 'KZ' | 'AT'>,
     memberLabel,
-    atlas: memberType === 'AT' ? '22G101-2' : memberType === 'DJ' ? '22G101-3' : '22G101-1',
+    atlas: memberType === 'DJ' ? '22G101-3' : '22G101-1',
     params: null,
     derived: null,
     toolResults: [],
