@@ -2,6 +2,7 @@ import { Canvas, useThree } from '@react-three/fiber';
 import type { ThreeEvent } from '@react-three/fiber';
 import { OrbitControls, GizmoHelper, GizmoViewport, Grid, Environment, Html } from '@react-three/drei';
 import { useMemo, useEffect } from 'react';
+import type { ReactNode } from 'react';
 import * as THREE from 'three';
 import { deriveStair } from '../domain/at/derive';
 import type { StairParams } from '../domain/at/types';
@@ -117,21 +118,111 @@ function StairRebars({ params, show }: { params: StairParams; show: boolean }) {
   );
 }
 
+// ─── 建筑尺寸线标注 ──────────────────────────────────────
+function DimLine({
+  start,
+  end,
+  text,
+  color = '#64748b',
+  tickLen = 90,
+  extLen = 200,
+  labelOffset = [0, 0, 0],
+}: {
+  start: [number, number, number];
+  end: [number, number, number];
+  text: ReactNode;
+  color?: string;
+  tickLen?: number;
+  extLen?: number;
+  labelOffset?: [number, number, number];
+}) {
+  const s = useMemo(() => new THREE.Vector3(...start), [start]);
+  const e = useMemo(() => new THREE.Vector3(...end), [end]);
+  const geometry = useMemo(() => {
+    const d = new THREE.Vector3().subVectors(e, s).normalize();
+    const perp = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 0, 1), d).normalize();
+    const halfTick = new THREE.Vector3().addVectors(d, perp).normalize().multiplyScalar(tickLen / 2);
+    const halfExt = perp.clone().multiplyScalar(extLen / 2);
+    const g = new THREE.BufferGeometry();
+    g.setFromPoints([
+      s, e,
+      s.clone().sub(halfTick), s.clone().add(halfTick),
+      e.clone().sub(halfTick), e.clone().add(halfTick),
+      s.clone().sub(halfExt), s.clone().add(halfExt),
+      e.clone().sub(halfExt), e.clone().add(halfExt),
+    ]);
+    return g;
+  }, [start, end, tickLen, extLen]);
+  const mid = useMemo(() => new THREE.Vector3().addVectors(s, e).multiplyScalar(0.5), [s, e]);
+  const labelPos = useMemo(() => mid.clone().add(new THREE.Vector3(...labelOffset)).toArray(), [mid, labelOffset]);
+  return (
+    <group>
+      <lineSegments geometry={geometry}>
+        <lineBasicMaterial color={color} />
+      </lineSegments>
+      <Html position={labelPos} center>
+        <span className="px-2 py-1 rounded bg-surface-container-lowest/80 border border-white/10 text-primary-fixed-dim text-[14px] font-mono whitespace-nowrap">{text}</span>
+      </Html>
+    </group>
+  );
+}
+
 // ─── 尺寸标注 ────────────────────────────────────────────
 function StairDimLabels({ params }: { params: StairParams }) {
   const derived = useMemo(() => deriveStair(params), [params]);
   const layout = derived.layout;
-  const label = (text: string, pos: [number, number, number]) => (
+  const pitch = layout.concretePitch;
+  const topOffset = derived.rebarOffsets.topLongitudinal;
+  const topY = (x: number) => Math.tan(pitch.angle) * x - topOffset / Math.cos(pitch.angle);
+  const label = (text: ReactNode, pos: [number, number, number]) => (
     <Html position={pos} center>
-      <span className="px-1.5 py-0.5 rounded bg-surface-container-lowest/80 border border-white/10 text-primary-fixed-dim text-[10px] font-mono whitespace-nowrap">{text}</span>
+      <span className="px-2 py-1 rounded bg-surface-container-lowest/80 border border-white/10 text-primary-fixed-dim text-[14px] font-mono whitespace-nowrap">{text}</span>
     </Html>
   );
+  const lowTopY = topY(0) + 300 + 2 * layout.rise;
+  const highTopY = topY(params.ln) + 120;
+  const normal = pitch.normal;
   return (
     <group>
-      {label(`ln=${params.ln}`, [params.ln / 2, layout.lowBeamBottomY - 150, 0])}
-      {label(`Hs=${params.Hs}`, [params.ln + 180, params.Hs / 2, 0])}
-      {label(`h=${params.h}`, [params.ln + 120, params.Hs + layout.concretePitch.normal.y * params.h / 2, 0])}
-      {label(`b=${params.b}`, [params.ln / 2, params.Hs + 120, params.b / 2 + 100])}
+      <DimLine
+        start={[0, layout.lowBeamBottomY - 200, 0]}
+        end={[params.ln, layout.lowBeamBottomY - 200, 0]}
+        text={<>b<sub>s</sub>×m=l<sub>n</sub></>}
+        labelOffset={[0, 100, 0]}
+      />
+      {label(`${Math.round(layout.run)}×${layout.treadCount}=${params.ln}`, [params.ln / 2, layout.lowBeamBottomY - 300, 0])}
+      <DimLine
+        start={[params.ln + 240, 0, 0]}
+        end={[params.ln + 240, params.Hs, 0]}
+        text={<>h<sub>s</sub>×(m+1)=H<sub>s</sub></>}
+        labelOffset={[120, 60, 0]}
+      />
+      {label(`${Math.round(layout.rise)}×${params.stepCount}=${params.Hs}`, [params.ln + 240 + 120, params.Hs / 2 - 60, 0])}
+      <DimLine
+        start={[-params.lowBeam.width, layout.lowBeamBottomY - 200, 0]}
+        end={[0, layout.lowBeamBottomY - 200, 0]}
+        text={`b=${params.lowBeam.width}`}
+        labelOffset={[0, 100, 0]}
+      />
+      <DimLine
+        start={[params.ln, layout.lowBeamBottomY - 200, 0]}
+        end={[params.ln + params.highBeam.width, layout.lowBeamBottomY - 200, 0]}
+        text={`b=${params.highBeam.width}`}
+        labelOffset={[0, 100, 0]}
+      />
+      <DimLine
+        start={[0, lowTopY, 0]}
+        end={[params.ln / 4, lowTopY, 0]}
+        text={<>l<sub>n</sub>/4={Math.round(params.ln / 4)}</>}
+        labelOffset={[0, 100, 0]}
+      />
+      <DimLine
+        start={[params.ln * 3 / 4, highTopY, 0]}
+        end={[params.ln, highTopY, 0]}
+        text={<>l<sub>n</sub>/4={Math.round(params.ln / 4)}</>}
+        labelOffset={[0, 100, 0]}
+      />
+      {label(`h=${params.h}`, [params.ln + 120, params.Hs + normal.y * params.h / 2, 0])}
     </group>
   );
 }

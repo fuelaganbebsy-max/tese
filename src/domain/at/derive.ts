@@ -20,7 +20,6 @@ export function defaultStair(): StairParams {
     bottomBar: { grade: 'HRB400', diameter: 10, spacing: 150 },
     topBar: { grade: 'HRB400', diameter: 10, spacing: 150 },
     distributionBar: { grade: 'HPB300', diameter: 8, spacing: 250 },
-    topExtend: 750,
     topAnchorMode: 'hinge',
   };
 }

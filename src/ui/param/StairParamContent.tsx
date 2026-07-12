@@ -96,7 +96,7 @@ export function StairParamContent() {
         </div>
 
         <Section title="几何尺寸">
-          <NumField label="水平投影长度 ln" value={params.ln} onChange={(v) => update({ ln: v })} unit="mm" min={1000} />
+          <NumField label="水平投影长度 ln" value={params.ln} onChange={(v) => update({ ln: v, topExtend: undefined })} unit="mm" min={1000} />
           <NumField label="踏步段总高度 Hs" value={params.Hs} onChange={(v) => update({ Hs: v })} unit="mm" min={500} />
           <NumField label="踏步级数" value={params.stepCount} onChange={(v) => update({ stepCount: Math.max(2, Math.round(v)) })} unit="级" min={2} step={1} />
           <NumField label="梯板厚度 h" value={params.h} onChange={(v) => update({ h: Number.isFinite(v) ? Math.max(0, v) : params.h })} unit="mm" min={0} />
