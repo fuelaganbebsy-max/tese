@@ -66,10 +66,12 @@ function RebarSpecEditor({
           type="number"
           min={50}
           max={500}
-          step={10}
           className="bg-surface-container-lowest border border-white/10 rounded focus:border-primary-fixed-dim h-7 px-2 font-mono text-[10px] text-on-surface text-center"
           value={value.spacing}
-          onChange={(e) => onChange({ ...value, spacing: Math.max(50, Number(e.target.value)) })}
+          onChange={(e) => {
+            const v = Number(e.target.value);
+            onChange({ ...value, spacing: Number.isFinite(v) ? v : value.spacing });
+          }}
         />
       </div>
     </div>
@@ -96,36 +98,46 @@ export function StairParamContent() {
         </div>
 
         <Section title="几何尺寸">
-          <NumField label="水平投影长度 ln" value={params.ln} onChange={(v) => update({ ln: v, topExtend: undefined })} unit="mm" min={1000} />
-          <NumField label="踏步段总高度 Hs" value={params.Hs} onChange={(v) => update({ Hs: v })} unit="mm" min={500} />
-          <NumField label="踏步级数" value={params.stepCount} onChange={(v) => update({ stepCount: Math.max(2, Math.round(v)) })} unit="级" min={2} step={1} />
-          <NumField label="梯板厚度 h" value={params.h} onChange={(v) => update({ h: Number.isFinite(v) ? Math.max(0, v) : params.h })} unit="mm" min={0} />
-          <NumField label="梯板宽度 b" value={params.b} onChange={(v) => update({ b: Math.max(600, v) })} unit="mm" min={600} />
-          <SelectField
-            label="保护层 c"
-            value={params.cover}
-            options={[15, 20, 25, 30, 40]}
-            onChange={(v) => update({ cover: v })}
-            fmt={(v) => `${v} mm`}
-          />
+          <div className="grid grid-cols-3 gap-3">
+            <NumField label="水平投影长度 ln" value={params.ln} onChange={(v) => update({ ln: Number.isFinite(v) ? v : params.ln, topExtend: undefined })} unit="mm" min={1000} />
+            <NumField label="踏步段总高度 Hs" value={params.Hs} onChange={(v) => update({ Hs: Number.isFinite(v) ? v : params.Hs })} unit="mm" min={500} />
+            <NumField label="踏步级数" value={params.stepCount} onChange={(v) => update({ stepCount: Number.isFinite(v) ? Math.round(v) : params.stepCount })} unit="级" min={2} step={1} />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <NumField label="梯板厚度 h" value={params.h} onChange={(v) => update({ h: Number.isFinite(v) ? v : params.h })} unit="mm" min={0} />
+            <NumField label="梯板宽度 b" value={params.b} onChange={(v) => update({ b: Number.isFinite(v) ? v : params.b })} unit="mm" min={600} />
+          </div>
         </Section>
 
         <Section title="材料">
-          <SelectField
-            label="混凝土强度等级"
-            value={params.concrete}
-            options={CONCRETE_OPTIONS}
-            onChange={(v) => update({ concrete: v as StairParams['concrete'] })}
-          />
+          <div className="grid grid-cols-2 gap-3">
+            <SelectField
+              label="混凝土强度等级"
+              value={params.concrete}
+              options={CONCRETE_OPTIONS}
+              onChange={(v) => update({ concrete: v as StairParams['concrete'] })}
+            />
+            <SelectField
+              label="保护层 c"
+              value={params.cover}
+              options={[15, 20, 25, 30, 40]}
+              onChange={(v) => update({ cover: v })}
+              fmt={(v) => `${v} mm`}
+            />
+          </div>
         </Section>
 
         <Section title="梯梁支座">
-          <NumField label="低端梯梁宽" value={params.lowBeam.width} onChange={(v) => update({ lowBeam: { ...params.lowBeam, width: Math.max(150, v) } })} unit="mm" min={150} />
-          <NumField label="低端梯梁高" value={params.lowBeam.height} onChange={(v) => update({ lowBeam: { ...params.lowBeam, height: Math.max(200, v) } })} unit="mm" min={200} />
-          <NumField label="低端梯梁横向长度" value={params.lowBeam.length} onChange={(v) => update({ lowBeam: { ...params.lowBeam, length: Math.max(1, v) } })} unit="mm" min={1} step={50} />
-          <NumField label="高端梯梁宽" value={params.highBeam.width} onChange={(v) => update({ highBeam: { ...params.highBeam, width: Math.max(150, v) } })} unit="mm" min={150} />
-          <NumField label="高端梯梁高" value={params.highBeam.height} onChange={(v) => update({ highBeam: { ...params.highBeam, height: Math.max(200, v) } })} unit="mm" min={200} />
-          <NumField label="高端梯梁横向长度" value={params.highBeam.length} onChange={(v) => update({ highBeam: { ...params.highBeam, length: Math.max(1, v) } })} unit="mm" min={1} step={50} />
+          <div className="grid grid-cols-3 gap-3">
+            <NumField label="低端梯梁宽" value={params.lowBeam.width} onChange={(v) => update({ lowBeam: { ...params.lowBeam, width: Number.isFinite(v) ? v : params.lowBeam.width } })} unit="mm" min={150} />
+            <NumField label="低端梯梁高" value={params.lowBeam.height} onChange={(v) => update({ lowBeam: { ...params.lowBeam, height: Number.isFinite(v) ? v : params.lowBeam.height } })} unit="mm" min={200} />
+            <NumField label="低端梯梁横向长度" value={params.lowBeam.length} onChange={(v) => update({ lowBeam: { ...params.lowBeam, length: Number.isFinite(v) ? v : params.lowBeam.length } })} unit="mm" min={1} step={50} />
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <NumField label="高端梯梁宽" value={params.highBeam.width} onChange={(v) => update({ highBeam: { ...params.highBeam, width: Number.isFinite(v) ? v : params.highBeam.width } })} unit="mm" min={150} />
+            <NumField label="高端梯梁高" value={params.highBeam.height} onChange={(v) => update({ highBeam: { ...params.highBeam, height: Number.isFinite(v) ? v : params.highBeam.height } })} unit="mm" min={200} />
+            <NumField label="高端梯梁横向长度" value={params.highBeam.length} onChange={(v) => update({ highBeam: { ...params.highBeam, length: Number.isFinite(v) ? v : params.highBeam.length } })} unit="mm" min={1} step={50} />
+          </div>
           {failedChecks.length > 0 && (
             <div className="space-y-2 pt-1">
               <h5 className="text-[10px] font-semibold text-on-surface-variant">校核提示</h5>
@@ -159,7 +171,7 @@ export function StairParamContent() {
           <RebarSpecEditor label="下部纵筋" value={params.bottomBar} onChange={(v) => update({ bottomBar: v })} />
           <RebarSpecEditor label="上部纵筋" value={params.topBar} onChange={(v) => update({ topBar: v })} />
           <RebarSpecEditor label="分布筋" value={params.distributionBar} onChange={(v) => update({ distributionBar: v })} />
-          <NumField label="上部纵筋跨内水平投影（ln/4）" value={params.topExtend ?? Math.round(params.ln / 4)} onChange={(v) => update({ topExtend: Math.max(0, v) })} unit="mm" min={0} />
+          <NumField label="上部纵筋跨内水平投影（ln/4）" value={params.topExtend ?? Math.round(params.ln / 4)} onChange={(v) => update({ topExtend: Number.isFinite(v) ? v : undefined })} unit="mm" min={0} />
           <SelectField
             label="上部纵筋支座锚固"
             value={params.topAnchorMode ?? 'hinge'}

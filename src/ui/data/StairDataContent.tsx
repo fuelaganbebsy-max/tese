@@ -47,6 +47,7 @@ const STROKE = {
   axis: '#64748b',
   text: '#e2e8f0',
   dim: '#64748b',
+  slabH: '#00daf3',
 };
 
 function StairQuantitiesTable() {
@@ -265,21 +266,20 @@ function StairSectionView() {
   const lowBeamRect = {
     x: toSvg(-params.lowBeam.width, 0).x,
     y: toSvg(0, layout.lowBeamTopY).y,
-    w: params.lowBeam.width * scale,
-    h: params.lowBeam.height * scale,
+    width: params.lowBeam.width * scale,
+    height: params.lowBeam.height * scale,
   };
   const highBeamRect = {
     x: toSvg(params.ln, 0).x,
     y: toSvg(0, layout.highBeamTopY).y,
-    w: params.highBeam.width * scale,
-    h: params.highBeam.height * scale,
+    width: params.highBeam.width * scale,
+    height: params.highBeam.height * scale,
   };
   const labelY = toSvg(0, yMin).y + 18;
-  const dimHsX = highBeamRect.x + highBeamRect.w + 18;
+  const dimHsX = highBeamRect.x + highBeamRect.width + 18;
   const distributionRadius = Math.max(1.5, params.distributionBar.diameter * scale / 2);
-  const slabMidX = params.ln / 2;
-  const treadIndex = Math.min(layout.treadCount - 1, Math.max(0, Math.floor(slabMidX / layout.run)));
-  const slabDimX = (treadIndex + 0.5) * layout.run;
+  const cornerIndex = Math.max(1, Math.min(layout.treadCount - 1, Math.round(layout.treadCount / 2)));
+  const slabDimX = cornerIndex * layout.run;
   const slabThickness = stairThicknessSegmentAtX(layout, params.h, slabDimX);
   const slabRootP = toSvg(slabThickness.root.x, slabThickness.root.y);
   const slabBottomP = toSvg(slabThickness.bottom.x, slabThickness.bottom.y);
@@ -313,7 +313,7 @@ function StairSectionView() {
           onDoubleClick={toggleExpand}
           title={expanded ? '双击还原' : '双击放大'}
         >
-          <span className="text-[10px] text-on-surface-variant font-mono whitespace-nowrap">纵向配筋 · {activeType}</span>
+          <span className="text-[10px] text-on-surface-variant font-mono whitespace-nowrap">纵向剖切面 · {activeType}</span>
         </div>
         <div
           className="flex-1 p-2 flex items-center justify-center relative bg-surface-container-lowest overflow-hidden select-none"
@@ -329,11 +329,11 @@ function StairSectionView() {
           style={{ cursor: dragging ? 'grabbing' : 'grab' }}
         >
           <div className="w-full h-full" style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: 'center center', transition: dragging ? 'none' : 'transform 0.05s' }}>
-            <svg viewBox={`0 0 ${size.w} ${size.h}`} className="w-full h-full" overflow="visible" role="img" aria-label="AT 楼梯纵向配筋剖面">
-                <rect {...lowBeamRect} fill="#cbd5e1" fillOpacity="1" stroke="#475569" strokeWidth={2} />
-                <text x={lowBeamRect.x + lowBeamRect.w / 2} y={lowBeamRect.y + lowBeamRect.h / 2} fill="#1e293b" fontSize={10} textAnchor="middle" dominantBaseline="middle">低梯梁</text>
-                <rect {...highBeamRect} fill="#cbd5e1" fillOpacity="1" stroke="#475569" strokeWidth={2} />
-                <text x={highBeamRect.x + highBeamRect.w / 2} y={highBeamRect.y + highBeamRect.h / 2} fill="#1e293b" fontSize={10} textAnchor="middle" dominantBaseline="middle">高梯梁</text>
+            <svg viewBox={`0 0 ${size.w} ${size.h}`} className="w-full h-full" overflow="visible" role="img" aria-label="AT 楼梯纵向剖切面">
+                <rect {...lowBeamRect} fill={STROKE.concrete} fillOpacity="0.35" stroke={STROKE.concrete} strokeWidth={1.5} />
+                <text x={lowBeamRect.x + lowBeamRect.width / 2} y={lowBeamRect.y + lowBeamRect.height / 2} fill={STROKE.text} fontSize={10} textAnchor="middle" dominantBaseline="middle">低梯梁</text>
+                <rect {...highBeamRect} fill={STROKE.concrete} fillOpacity="0.35" stroke={STROKE.concrete} strokeWidth={1.5} />
+                <text x={highBeamRect.x + highBeamRect.width / 2} y={highBeamRect.y + highBeamRect.height / 2} fill={STROKE.text} fontSize={10} textAnchor="middle" dominantBaseline="middle">高梯梁</text>
                 <path d={polylinePath(layout.concreteProfile, true)} fill={STROKE.concrete} fillOpacity="0.35" stroke={STROKE.concrete} strokeWidth={1.5} />
                 <line x1={lowDatum.x} y1={lowDatum.y} x2={highDatum.x} y2={highDatum.y} stroke={STROKE.axis} strokeWidth={0.5} strokeDasharray="4 4" />
                 <path d={polylinePath(rebar.bottom.points)} fill="none" stroke={STROKE.rebar.bottom} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
@@ -347,15 +347,15 @@ function StairSectionView() {
                 <text x={(lowDatum.x + highDatum.x) / 2} y={labelY + 14} textAnchor="middle" fill={STROKE.text} fontSize={10}>ln={params.ln}</text>
                 {dimLine(dimHsX, lowDatum.y, dimHsX, highDatum.y)}
                 <text x={dimHsX + 8} y={(lowDatum.y + highDatum.y) / 2} fill={STROKE.text} fontSize={10} transform={`rotate(90 ${dimHsX + 8} ${(lowDatum.y + highDatum.y) / 2})`} textAnchor="middle">Hs={params.Hs}</text>
-                <line x1={slabRootP.x} y1={slabRootP.y} x2={slabBottomP.x} y2={slabBottomP.y} stroke={STROKE.dim} strokeWidth={0.7} markerStart="url(#stair-tick)" markerEnd="url(#stair-tick)" />
-                <line x1={slabDimMid.x} y1={slabDimMid.y} x2={slabTextP.x} y2={slabTextP.y} stroke={STROKE.dim} strokeWidth={0.7} />
-                <text x={slabTextP.x} y={slabTextP.y - 8} fill={STROKE.text} fontSize={10} textAnchor="middle" dominantBaseline="middle">h={params.h}</text>
+                <line x1={slabRootP.x} y1={slabRootP.y} x2={slabBottomP.x} y2={slabBottomP.y} stroke={STROKE.slabH} strokeWidth={0.7} markerStart="url(#stair-tick)" markerEnd="url(#stair-tick)" />
+                <line x1={slabDimMid.x} y1={slabDimMid.y} x2={slabTextP.x} y2={slabTextP.y} stroke={STROKE.slabH} strokeWidth={0.7} />
+                <text x={slabTextP.x} y={slabTextP.y - 8} fill={STROKE.slabH} fontSize={10} textAnchor="middle" dominantBaseline="middle">h={params.h}</text>
                 <defs>
                   <marker id="stair-arrow" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto-start-reverse">
                     <path d="M0,1 L6,3 L0,5 Z" fill={STROKE.dim} />
                   </marker>
-                  <marker id="stair-tick" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
-                    <line x1="1" y1="5" x2="5" y2="1" stroke={STROKE.dim} strokeWidth={1.2} />
+                  <marker id="stair-tick" markerWidth="12" markerHeight="12" refX="6" refY="6" orient="auto">
+                    <line x1="2" y1="10" x2="10" y2="2" stroke={STROKE.slabH} strokeWidth={2.4} />
                   </marker>
                 </defs>
               </svg>

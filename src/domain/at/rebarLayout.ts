@@ -64,6 +64,37 @@ function stationAtS(layout: StairLayout, s: number, inwardOffset: number): Stair
   };
 }
 
+function dedupeStations(stations: StairDistributionStation[], eps = 1): StairDistributionStation[] {
+  return stations
+    .sort((a, b) => a.s - b.s)
+    .filter((station, index, arr) => index === 0 || Math.abs(station.s - arr[index - 1].s) > eps);
+}
+
+function adjustTopDistributionForHook(
+  stations: StairDistributionStation[],
+  layout: StairLayout,
+  spanEndX: number,
+  supportX: number,
+  topDistributionOffset: number,
+  delta: number,
+  tolerance: number,
+): StairDistributionStation[] {
+  const direction = supportX > spanEndX ? 1 : -1;
+  const desiredX = spanEndX + direction * delta;
+  const point = pointAtX(layout, desiredX, topDistributionOffset);
+  const pitch = layout.concretePitch;
+  const s = (point.x - topDistributionOffset * pitch.normal.x) / pitch.dir.x;
+  const newStation: StairDistributionStation = { s, x: point.x, y: point.y };
+
+  const overlapIndex = stations.findIndex((st) => Math.abs(st.x - spanEndX) <= tolerance);
+  if (overlapIndex >= 0) {
+    const result = [...stations];
+    result[overlapIndex] = newStation;
+    return result;
+  }
+  return [...stations, newStation];
+}
+
 export function deriveStairRebarLayout(params: StairParams): StairRebarLayout {
   const derived = deriveStair(params);
   const { layout, rebarOffsets } = derived;
@@ -142,12 +173,37 @@ export function deriveStairRebarLayout(params: StairParams): StairRebarLayout {
   );
   const lowTopXRange = [Math.min(lowTop.supportTop.x, lowTop.spanEnd.x), Math.max(lowTop.supportTop.x, lowTop.spanEnd.x)] as const;
   const highTopXRange = [Math.min(highTop.spanEnd.x, highTop.supportTop.x), Math.max(highTop.spanEnd.x, highTop.supportTop.x)] as const;
-  const topDistributionStations = stationSs
+  const topDistributionSpacing = derived.distributionBarCount > 1
+    ? (layout.concretePitch.slantLength - 2 * distributionEdge) / (derived.distributionBarCount - 1)
+    : 0;
+  const hookDelta = Math.max(params.distributionBar.diameter * 3, 30);
+  const hookTolerance = topDistributionSpacing / 2;
+
+  let topDistributionStations = stationSs
     .map((s) => stationAtS(layout, s, rebarOffsets.topDistribution))
     .filter((station) => {
       const x = station.x;
       return (x >= lowTopXRange[0] && x <= lowTopXRange[1]) || (x >= highTopXRange[0] && x <= highTopXRange[1]);
     });
+  topDistributionStations = adjustTopDistributionForHook(
+    topDistributionStations,
+    layout,
+    lowTop.spanEnd.x,
+    lowTop.supportTop.x,
+    rebarOffsets.topDistribution,
+    hookDelta,
+    hookTolerance,
+  );
+  topDistributionStations = adjustTopDistributionForHook(
+    topDistributionStations,
+    layout,
+    highTop.spanEnd.x,
+    highTop.supportTop.x,
+    rebarOffsets.topDistribution,
+    hookDelta,
+    hookTolerance,
+  );
+  topDistributionStations = dedupeStations(topDistributionStations);
   const bottomDistributionStations = stationSs.map((s) => stationAtS(layout, s, rebarOffsets.bottomDistribution));
   const distributionZRange: [number, number] = [
     -params.b / 2 + distributionEdge,

@@ -285,6 +285,19 @@ export function deriveStair(params: StairParams): StairDerived {
       topDistributionBarCount += 1;
     }
   }
+  // 上部负筋 90° 弯钩内侧保证有一根分布筋；若原间距筋已覆盖弯钩位置则不再额外添加
+  const hookDelta = Math.max(params.distributionBar.diameter * 3, 30);
+  const hookTolerance = topDistributionSpacing / 2;
+  const regularTopDistributionXs = Array.from({ length: distributionBarCount }, (_, i) => {
+    const s = distributionEdge + i * topDistributionSpacing;
+    return s * concreteDir.x + topDistribution * concreteNormal.x;
+  });
+  if (!regularTopDistributionXs.some((x) => Math.abs(x - lowTopSpanEndX) <= hookTolerance)) {
+    topDistributionBarCount += 1;
+  }
+  if (!regularTopDistributionXs.some((x) => Math.abs(x - highTopSpanEndX) <= hookTolerance)) {
+    topDistributionBarCount += 1;
+  }
 
   const totalBarCount = bottomBarCount + topBarCount * 2 + topDistributionBarCount + distributionBarCount;
   const topRequired = topAnchor;

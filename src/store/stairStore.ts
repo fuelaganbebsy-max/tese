@@ -9,6 +9,7 @@ interface ViewState {
   showAnnotations: boolean;
   showSectionCut: boolean;
   sectionCutX: number;
+  sectionCutZ: number;
 }
 
 interface StairPersistedState {
@@ -31,6 +32,7 @@ const defaultStairView = (): ViewState => ({
   showAnnotations: true,
   showSectionCut: false,
   sectionCutX: 0.5,
+  sectionCutZ: 0.5,
 });
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -83,6 +85,12 @@ function normalizeStairView(input: unknown): ViewState {
     && view.sectionCutX <= 1
     ? view.sectionCutX
     : defaults.sectionCutX;
+  const sectionCutZ = typeof view.sectionCutZ === 'number'
+    && Number.isFinite(view.sectionCutZ)
+    && view.sectionCutZ >= 0
+    && view.sectionCutZ <= 1
+    ? view.sectionCutZ
+    : defaults.sectionCutZ;
 
   return {
     showConcrete: booleanValue('showConcrete'),
@@ -90,6 +98,7 @@ function normalizeStairView(input: unknown): ViewState {
     showAnnotations: booleanValue('showAnnotations'),
     showSectionCut: booleanValue('showSectionCut'),
     sectionCutX,
+    sectionCutZ,
   };
 }
 

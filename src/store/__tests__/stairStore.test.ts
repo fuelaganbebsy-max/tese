@@ -26,6 +26,7 @@ describe('stairStore persisted-state migration', () => {
       showAnnotations: true,
       showSectionCut: false,
       sectionCutX: 0.5,
+      sectionCutZ: 0.5,
     });
     expect(persisted).toEqual(before);
   });
@@ -50,6 +51,7 @@ describe('stairStore persisted-state migration', () => {
       showAnnotations: true,
       showSectionCut: false,
       sectionCutX: 0.5,
+      sectionCutZ: 0.5,
     });
     expect(migrated.params.lowBeam.length).toBeGreaterThanOrEqual(migrated.params.b);
     expect(migrated.params.highBeam.length).toBeGreaterThanOrEqual(migrated.params.b);
