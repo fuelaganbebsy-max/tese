@@ -15,3 +15,5 @@ dist-ssr
 
 # Design reference (local only)
 stitch_rebarvisual_ai_dashboard/
+.vercel
+.env*

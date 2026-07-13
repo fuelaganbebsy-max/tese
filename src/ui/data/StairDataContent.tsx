@@ -1,4 +1,4 @@
-import { useMemo, useState, useRef, useCallback } from 'react';
+import { useMemo, useState, useRef, useCallback, useEffect } from 'react';
 import { useStairStore } from '../../store/stairStore';
 import { useMemberStore } from '../../store/memberStore';
 import { deriveStair, stairThicknessSegmentAtX } from '../../domain/at/derive';
@@ -12,6 +12,7 @@ import { RebarCutView } from '../RebarCutView';
 import type { StairParams } from '../../domain/at/types';
 
 const MARGIN = 42;
+const EXT_LINE_HALF = 25;
 
 /* ---------- 切换按钮 ---------- */
 function SlideToggle<T extends string>({ options, value, onChange }: {
@@ -194,6 +195,8 @@ function StairSectionView() {
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [dragging, setDragging] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const [hTextOffset, setHTextOffset] = useState({ dx: 0, dy: 0 });
+  const [hTextDrag, setHTextDrag] = useState<null | { startX: number; startY: number; startDx: number; startDy: number }>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const startRef = useRef({ x: 0, y: 0, w: 0, h: 0 });
   const dragStartRef = useRef({ x: 0, y: 0, panX: 0, panY: 0 });
@@ -239,6 +242,26 @@ function StairSectionView() {
   }, [dragging]);
 
   const onPanEnd = useCallback(() => setDragging(false), []);
+  const onHTextMouseDown = useCallback((event: React.MouseEvent) => {
+    event.stopPropagation();
+    setHTextDrag({ startX: event.clientX, startY: event.clientY, startDx: hTextOffset.dx, startDy: hTextOffset.dy });
+  }, [hTextOffset]);
+
+  useEffect(() => {
+    if (!hTextDrag) return;
+    const onMove = (event: MouseEvent) => {
+      const dx = (event.clientX - hTextDrag.startX) / zoom;
+      const dy = (event.clientY - hTextDrag.startY) / zoom;
+      setHTextOffset({ dx: hTextDrag.startDx + dx, dy: hTextDrag.startDy + dy });
+    };
+    const onUp = () => setHTextDrag(null);
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+  }, [hTextDrag, zoom]);
   const layout = derived.layout;
   const plotW = Math.max(1, size.w - MARGIN * 2);
   const plotH = Math.max(1, size.h - MARGIN * 2);
@@ -289,8 +312,22 @@ function StairSectionView() {
     slabThickness.bottom.x + layout.concretePitch.normal.x * textGapWorld,
     slabThickness.bottom.y + layout.concretePitch.normal.y * textGapWorld,
   );
+  const hTextPos = useMemo(() => ({
+    x: slabTextP.x + hTextOffset.dx,
+    y: slabTextP.y - 24 + hTextOffset.dy,
+  }), [slabTextP, hTextOffset]);
+  const hHalf = EXT_LINE_HALF;
+  const hDx = slabBottomP.x - slabRootP.x;
+  const hDy = slabBottomP.y - slabRootP.y;
+  const hLen = Math.hypot(hDx, hDy) || 1;
+  const hPerpX = -hDy / hLen;
+  const hPerpY = hDx / hLen;
+  const hExtRootA = { x: slabRootP.x - hPerpX * hHalf, y: slabRootP.y - hPerpY * hHalf };
+  const hExtRootB = { x: slabRootP.x + hPerpX * hHalf, y: slabRootP.y + hPerpY * hHalf };
+  const hExtBottomA = { x: slabBottomP.x - hPerpX * hHalf, y: slabBottomP.y - hPerpY * hHalf };
+  const hExtBottomB = { x: slabBottomP.x + hPerpX * hHalf, y: slabBottomP.y + hPerpY * hHalf };
   const dimLine = (x1: number, y1: number, x2: number, y2: number) => (
-    <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={STROKE.dim} strokeWidth={0.7} markerEnd="url(#stair-arrow)" markerStart="url(#stair-arrow)" />
+    <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={STROKE.dim} strokeWidth={0.7} markerEnd="url(#stair-dim-tick)" markerStart="url(#stair-dim-tick)" />
   );
 
   return (
@@ -331,9 +368,7 @@ function StairSectionView() {
           <div className="w-full h-full" style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: 'center center', transition: dragging ? 'none' : 'transform 0.05s' }}>
             <svg viewBox={`0 0 ${size.w} ${size.h}`} className="w-full h-full" overflow="visible" role="img" aria-label="AT 楼梯纵向剖切面">
                 <rect {...lowBeamRect} fill={STROKE.concrete} fillOpacity="0.35" stroke={STROKE.concrete} strokeWidth={1.5} />
-                <text x={lowBeamRect.x + lowBeamRect.width / 2} y={lowBeamRect.y + lowBeamRect.height / 2} fill={STROKE.text} fontSize={10} textAnchor="middle" dominantBaseline="middle">低梯梁</text>
                 <rect {...highBeamRect} fill={STROKE.concrete} fillOpacity="0.35" stroke={STROKE.concrete} strokeWidth={1.5} />
-                <text x={highBeamRect.x + highBeamRect.width / 2} y={highBeamRect.y + highBeamRect.height / 2} fill={STROKE.text} fontSize={10} textAnchor="middle" dominantBaseline="middle">高梯梁</text>
                 <path d={polylinePath(layout.concreteProfile, true)} fill={STROKE.concrete} fillOpacity="0.35" stroke={STROKE.concrete} strokeWidth={1.5} />
                 <line x1={lowDatum.x} y1={lowDatum.y} x2={highDatum.x} y2={highDatum.y} stroke={STROKE.axis} strokeWidth={0.5} strokeDasharray="4 4" />
                 <path d={polylinePath(rebar.bottom.points)} fill="none" stroke={STROKE.rebar.bottom} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
@@ -343,16 +378,31 @@ function StairSectionView() {
                   const point = toSvg(station.x, station.y);
                   return <circle key={`${station.s}-${index}`} cx={point.x} cy={point.y} r={distributionRadius} fill={STROKE.rebar.distribution} />;
                 })}
+                <line x1={lowDatum.x} y1={labelY - EXT_LINE_HALF} x2={lowDatum.x} y2={labelY + EXT_LINE_HALF} stroke={STROKE.dim} strokeWidth={0.5} />
+                <line x1={highDatum.x} y1={labelY - EXT_LINE_HALF} x2={highDatum.x} y2={labelY + EXT_LINE_HALF} stroke={STROKE.dim} strokeWidth={0.5} />
                 {dimLine(lowDatum.x, labelY, highDatum.x, labelY)}
-                <text x={(lowDatum.x + highDatum.x) / 2} y={labelY + 14} textAnchor="middle" fill={STROKE.text} fontSize={10}>ln={params.ln}</text>
+                <text x={(lowDatum.x + highDatum.x) / 2} y={labelY + 42} textAnchor="middle" fill={STROKE.text} fontSize={30}>ln={params.ln}</text>
+                <line x1={dimHsX - EXT_LINE_HALF} y1={lowDatum.y} x2={dimHsX + EXT_LINE_HALF} y2={lowDatum.y} stroke={STROKE.dim} strokeWidth={0.5} />
+                <line x1={dimHsX - EXT_LINE_HALF} y1={highDatum.y} x2={dimHsX + EXT_LINE_HALF} y2={highDatum.y} stroke={STROKE.dim} strokeWidth={0.5} />
                 {dimLine(dimHsX, lowDatum.y, dimHsX, highDatum.y)}
-                <text x={dimHsX + 8} y={(lowDatum.y + highDatum.y) / 2} fill={STROKE.text} fontSize={10} transform={`rotate(90 ${dimHsX + 8} ${(lowDatum.y + highDatum.y) / 2})`} textAnchor="middle">Hs={params.Hs}</text>
+                <text x={dimHsX + 24} y={(lowDatum.y + highDatum.y) / 2} fill={STROKE.text} fontSize={30} transform={`rotate(90 ${dimHsX + 24} ${(lowDatum.y + highDatum.y) / 2})`} textAnchor="middle">Hs={params.Hs}</text>
+                <line x1={hExtRootA.x} y1={hExtRootA.y} x2={hExtRootB.x} y2={hExtRootB.y} stroke={STROKE.slabH} strokeWidth={0.5} />
+                <line x1={hExtBottomA.x} y1={hExtBottomA.y} x2={hExtBottomB.x} y2={hExtBottomB.y} stroke={STROKE.slabH} strokeWidth={0.5} />
                 <line x1={slabRootP.x} y1={slabRootP.y} x2={slabBottomP.x} y2={slabBottomP.y} stroke={STROKE.slabH} strokeWidth={0.7} markerStart="url(#stair-tick)" markerEnd="url(#stair-tick)" />
-                <line x1={slabDimMid.x} y1={slabDimMid.y} x2={slabTextP.x} y2={slabTextP.y} stroke={STROKE.slabH} strokeWidth={0.7} />
-                <text x={slabTextP.x} y={slabTextP.y - 8} fill={STROKE.slabH} fontSize={10} textAnchor="middle" dominantBaseline="middle">h={params.h}</text>
+                <line x1={slabDimMid.x} y1={slabDimMid.y} x2={hTextPos.x} y2={hTextPos.y} stroke={STROKE.slabH} strokeWidth={0.7} />
+                <text
+                  x={hTextPos.x}
+                  y={hTextPos.y}
+                  fill={STROKE.slabH}
+                  fontSize={30}
+                  textAnchor="middle"
+                  dominantBaseline="middle"
+                  style={{ cursor: hTextDrag ? 'grabbing' : 'grab' }}
+                  onMouseDown={onHTextMouseDown}
+                >h={params.h}</text>
                 <defs>
-                  <marker id="stair-arrow" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto-start-reverse">
-                    <path d="M0,1 L6,3 L0,5 Z" fill={STROKE.dim} />
+                  <marker id="stair-dim-tick" markerWidth="12" markerHeight="12" refX="6" refY="6" orient="auto">
+                    <line x1="2" y1="10" x2="10" y2="2" stroke={STROKE.dim} strokeWidth={1.6} />
                   </marker>
                   <marker id="stair-tick" markerWidth="12" markerHeight="12" refX="6" refY="6" orient="auto">
                     <line x1="2" y1="10" x2="10" y2="2" stroke={STROKE.slabH} strokeWidth={2.4} />
