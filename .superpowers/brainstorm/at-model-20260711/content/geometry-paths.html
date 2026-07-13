@@ -1,0 +1,72 @@
+<style>
+  .evidence-grid { display:grid; grid-template-columns:0.9fr 1.35fr; gap:16px; margin:24px 0; align-items:stretch; }
+  .atlas { border:1px solid #374151; border-radius:6px; overflow:hidden; background:#fff; }
+  .atlas img { display:block; width:100%; height:430px; object-fit:cover; object-position:left bottom; }
+  .diagram { border:1px solid #374151; border-radius:6px; padding:14px; background:#0b1220; }
+  .legend { display:flex; gap:18px; flex-wrap:wrap; margin:8px 0 2px; color:#cbd5e1; font-size:13px; }
+  .swatch { display:inline-block; width:24px; height:4px; margin-right:7px; vertical-align:middle; }
+  .rule-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:12px; margin:20px 0; }
+  .rule { border-left:3px solid #22c55e; background:#111827; padding:12px 14px; color:#cbd5e1; }
+  .rule strong { display:block; color:#f8fafc; margin-bottom:5px; }
+  .wrong { border-left-color:#ef4444; }
+  .formula { font-family:ui-monospace,Consolas,monospace; color:#fde68a; }
+  @media (max-width:960px) { .evidence-grid,.rule-grid { grid-template-columns:1fr; } .atlas img { height:320px; } }
+</style>
+
+<h2>AT 几何与钢筋路径</h2>
+<p class="subtitle">左侧为 22G101-2 第 2-8 页支座细部，右侧为领域模型应输出的路径语义。</p>
+
+<div class="evidence-grid">
+  <div class="atlas">
+    <img src="/files/atlas-low-support.png" alt="22G101-2 AT 低端支座配筋细部">
+  </div>
+  <div class="diagram">
+    <svg viewBox="0 0 920 440" width="100%" role="img" aria-label="AT 楼梯正确钢筋路径示意">
+      <rect x="44" y="280" width="132" height="126" fill="#334155" stroke="#94a3b8" stroke-width="2" />
+      <rect x="744" y="72" width="132" height="160" fill="#334155" stroke="#94a3b8" stroke-width="2" />
+      <path d="M176 280 L246 280 L246 246 L316 246 L316 212 L386 212 L386 178 L456 178 L456 144 L526 144 L526 110 L596 110 L596 76 L744 76 L744 156 L205 316 Z" fill="#475569" stroke="#cbd5e1" stroke-width="2" />
+      <line x1="110" y1="250" x2="110" y2="407" stroke="#64748b" stroke-dasharray="6 6" />
+      <line x1="810" y1="52" x2="810" y2="232" stroke="#64748b" stroke-dasharray="6 6" />
+
+      <polyline points="74,369 74,321 202,292 728,112 850,82 850,130" fill="none" stroke="#22c55e" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" />
+      <polyline points="44,319 44,271 177,240 352,180" fill="none" stroke="#f59e0b" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" />
+      <polyline points="568,125 744,65 876,34 876,82" fill="none" stroke="#f59e0b" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" />
+
+      <line x1="176" y1="338" x2="351" y2="278" stroke="#38bdf8" stroke-width="2" marker-end="url(#arrow-blue)" />
+      <text x="212" y="354" fill="#7dd3fc" font-size="18">水平投影 ln/4</text>
+      <line x1="110" y1="385" x2="74" y2="369" stroke="#a7f3d0" stroke-width="2" />
+      <text x="118" y="393" fill="#a7f3d0" font-size="17">越过支座中线 ≥5d</text>
+      <text x="18" y="300" fill="#fdba74" font-size="17">梁边 15d</text>
+      <text x="654" y="276" fill="#cbd5e1" font-size="17">支座段校核 ≥0.35lab / 0.6lab</text>
+      <text x="318" y="413" fill="#cbd5e1" font-size="17">保护层中心线 = cover + d/2，始终位于梯板内</text>
+      <defs><marker id="arrow-blue" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8 Z" fill="#38bdf8" /></marker></defs>
+    </svg>
+    <div class="legend">
+      <span><i class="swatch" style="background:#22c55e"></i>连续下部纵筋</span>
+      <span><i class="swatch" style="background:#f59e0b"></i>两端上部纵筋</span>
+      <span><i class="swatch" style="background:#64748b"></i>梯梁支座中线</span>
+    </div>
+  </div>
+</div>
+
+<div class="rule-grid">
+  <div class="rule wrong"><strong>当前错误：保护层方向</strong>上层使用 <span class="formula">-cover</span>，把钢筋推到梯板外；且中心线未加半径。</div>
+  <div class="rule"><strong>修正：层位中心线</strong>上层 <span class="formula">cover+d/2</span>，下层 <span class="formula">h-cover-d/2</span>，均沿梯板内法向。</div>
+  <div class="rule wrong"><strong>当前错误：梁内水平段</strong>底筋被改成梁顶水平 la，上筋 15d 错放在跨内截断端。</div>
+  <div class="rule"><strong>修正：图集折线</strong>纵筋沿斜板延伸进梯梁；底筋越过中线 5d，上筋到梁边并校核锚固，支座端向下 15d。</div>
+  <div class="rule wrong"><strong>当前错误：ln/4</strong>把水平投影值直接当成斜向长度，导致两端上筋偏短。</div>
+  <div class="rule"><strong>修正：投影换算</strong><span class="formula">斜向长度 = 水平投影 / cos(theta)</span>；跨内端在 ln/4 位置截断，不虚构 15d 钩。</div>
+  <div class="rule"><strong>踏步与混凝土</strong><span class="formula">Hs=hs(m+1)</span>、<span class="formula">ln=bs*m</span>；梯板与两端梯梁保持实体相交，不再只在一个点接触。</div>
+  <div class="rule"><strong>分布筋</strong>按 1-1 截面设置上下两层，沿梯板斜长排布、横跨梯板宽度，并按各自直径校核保护层。</div>
+</div>
+
+<div class="options">
+  <div class="option" data-choice="geometry-approved" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content"><h3>认可路径设计</h3><p>继续确认校核、界面与测试设计。</p></div>
+  </div>
+  <div class="option" data-choice="geometry-revise" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content"><h3>需要调整</h3><p>在终端指出钢筋、支座或混凝土关系的问题。</p></div>
+  </div>
+</div>

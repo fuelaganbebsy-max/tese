@@ -1,0 +1,62 @@
+<style>
+  .compare-band { margin: 24px 0 30px; }
+  .compare-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .compare-frame { border: 1px solid #374151; border-radius: 6px; overflow: hidden; background: #0b0f14; }
+  .compare-frame img { display: block; width: 100%; height: 390px; object-fit: contain; background: #fff; }
+  .compare-frame.current img { background: #0b0f14; }
+  .compare-frame figcaption { padding: 11px 13px; background: #111827; color: #cbd5e1; line-height: 1.45; }
+  .compare-frame strong { display: block; color: #f8fafc; margin-bottom: 4px; }
+  .question-note { border-left: 3px solid #38bdf8; padding: 11px 14px; background: #0f172a; color: #cbd5e1; margin: 18px 0; }
+  @media (max-width: 900px) {
+    .compare-grid { grid-template-columns: 1fr; }
+    .compare-frame img { height: auto; max-height: 430px; }
+  }
+</style>
+
+<h2>AT 当前实现复审</h2>
+<p class="subtitle">左侧是当前未提交版本的实际页面截图，右侧是 22G101-2 对应构造。先确认你所说的“模型错误”主要落在哪一类。</p>
+
+<section class="compare-band">
+  <h3>1. 混凝土与两端梯梁</h3>
+  <div class="compare-grid">
+    <figure class="compare-frame current">
+      <img src="/files/current-at-concrete-20260711.png" alt="当前 AT 纯混凝土模型">
+      <figcaption><strong>当前实现</strong>已隐藏钢筋。请重点看首末踏步、斜板端面、低端/高端梯梁的标高与横向伸出。</figcaption>
+    </figure>
+    <figure class="compare-frame">
+      <img src="/files/at-1-8-iso.png" alt="22G101-2 AT 型楼梯轴测构造">
+      <figcaption><strong>图集形态</strong>AT 踏步段直接支承于低端和高端梯梁，两端不附加平台板。</figcaption>
+    </figure>
+  </div>
+</section>
+
+<section class="compare-band">
+  <h3>2. 梯板纵筋与分布筋</h3>
+  <div class="compare-grid">
+    <figure class="compare-frame current">
+      <img src="/files/current-at-rebar-20260711.png" alt="当前 AT 配筋模型">
+      <figcaption><strong>当前实现</strong>粉色为上部纵筋、黄色为下部纵筋、蓝色为上下两层分布筋。</figcaption>
+    </figure>
+    <figure class="compare-frame">
+      <img src="/files/at-2-8-rebar.png" alt="22G101-2 第 2-8 页 AT 型楼梯板配筋构造">
+      <figcaption><strong>图集构造</strong>重点核对 ln/4、0.35lab/0.6lab、越过支座中线 5d、端部 15d 以及 1-1 双层分布筋。</figcaption>
+    </figure>
+  </div>
+</section>
+
+<div class="question-note">请选择最接近你的判断；如果是某个局部构造错误，可以选择最接近的一项后在对话中补充。</div>
+
+<div class="options">
+  <div class="option" data-choice="scope-concrete" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content"><h3>主要是混凝土外形</h3><p>踏步、斜板、两端梯梁或支承关系不对。</p></div>
+  </div>
+  <div class="option" data-choice="scope-rebar" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content"><h3>主要是钢筋构造</h3><p>纵筋路径、锚固弯折、分布筋层位或数量不对。</p></div>
+  </div>
+  <div class="option" data-choice="scope-both" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content"><h3>两者都需要重做</h3><p>混凝土和配筋都不能作为 AT 正确基线。</p></div>
+  </div>
+</div>

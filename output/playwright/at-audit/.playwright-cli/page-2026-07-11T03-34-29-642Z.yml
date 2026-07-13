@@ -1,0 +1,60 @@
+- generic [ref=e3]:
+  - navigation [ref=e4]:
+    - generic [ref=e5]:
+      - generic [ref=e6]: view_in_ar
+      - text: Octopus的AI钢筋平法工具
+  - generic [ref=e7]:
+    - generic [ref=e8]:
+      - generic [ref=e9]: verified
+      - text: 按22G101国标图集构建
+    - heading "AI钢筋平法3D可视化工具" [level=1] [ref=e10]
+    - paragraph [ref=e11]: 在浏览器中即时生成框架梁、柱等构件的三维钢筋骨架与混凝土模型。纯前端运行，无需安装，无需后端，开箱即用。
+    - generic [ref=e12]:
+      - generic [ref=e13]:
+        - generic [ref=e14]: login
+        - text: 登录以进入系统
+      - generic [ref=e15]: 学校
+      - combobox [ref=e16]:
+        - option "请选择学校" [disabled]
+        - option "常州工程职业技术学院" [selected]
+      - generic [ref=e17]: 姓名
+      - textbox "请输入姓名" [ref=e18]
+      - generic [ref=e19]: 学号 / 工号
+      - textbox "请输入学号或工号" [ref=e20]
+      - button "rocket_launch 登录并进入" [disabled] [ref=e21]:
+        - generic [ref=e22]: rocket_launch
+        - text: 登录并进入
+    - generic [ref=e23]: keyboard_arrow_down
+  - generic [ref=e25]:
+    - generic [ref=e26]:
+      - heading "为建筑工程识图打造" [level=2] [ref=e27]
+      - paragraph [ref=e28]: 覆盖日常平法识图与配筋校验所需的核心功能
+    - generic [ref=e29]:
+      - generic [ref=e30]:
+        - generic [ref=e31]: view_in_ar
+        - heading "实时 3D 渲染" [level=3] [ref=e33]
+        - paragraph [ref=e34]: 参数变动即刻反映到钢筋骨架与混凝土模型，所见即所得。
+      - generic [ref=e35]:
+        - generic [ref=e36]: schema
+        - heading "22G101 规范" [level=3] [ref=e38]
+        - paragraph [ref=e39]: 自动计算锚固长度、弯钩、箍筋加密区，严格遵循国标图集。
+      - generic [ref=e40]:
+        - generic [ref=e41]: dashboard
+        - heading "多构件支持" [level=3] [ref=e43]
+        - paragraph [ref=e44]: 框架梁 KL、次梁 L、屋面梁 WKL、悬挑梁 XL、柱 KZ 一站覆盖。
+      - generic [ref=e45]:
+        - generic [ref=e46]: tune
+        - heading "参数化设计" [level=3] [ref=e48]
+        - paragraph [ref=e49]: 截面尺寸、配筋规格、跨度、支座条件等全参数实时可调。
+      - generic [ref=e50]:
+        - generic [ref=e51]: file_upload
+        - heading "导入 / 导出" [level=3] [ref=e53]
+        - paragraph [ref=e54]: 以 JSON 格式保存和加载设计方案，方便多次复用与协作。
+      - generic [ref=e55]:
+        - generic [ref=e56]: devices
+        - heading "响应式布局" [level=3] [ref=e58]
+        - paragraph [ref=e59]: 自适应宽屏与平板尺寸，侧栏和面板随窗口智能折叠。
+  - contentinfo [ref=e60]:
+    - generic [ref=e61]:
+      - generic [ref=e62]: view_in_ar
+      - generic [ref=e63]: Octopus的AI钢筋平法工具

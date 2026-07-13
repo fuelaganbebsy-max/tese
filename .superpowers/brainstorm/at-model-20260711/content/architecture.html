@@ -1,0 +1,72 @@
+<style>
+  .flow-grid { display:grid; grid-template-columns:1fr 64px 1.15fr 64px 1.35fr; gap:12px; align-items:stretch; margin:28px 0; }
+  .flow-node { border:1px solid #374151; border-radius:6px; padding:18px; background:#111827; min-height:150px; }
+  .flow-node.source { border-top:4px solid #f59e0b; }
+  .flow-node.domain { border-top:4px solid #22c55e; }
+  .flow-node.consumer { border-top:4px solid #38bdf8; }
+  .flow-arrow { display:flex; align-items:center; justify-content:center; color:#9ca3af; font-size:30px; }
+  .flow-node h3 { margin:0 0 12px; font-size:18px; }
+  .flow-node ul { margin:0; padding-left:18px; color:#cbd5e1; line-height:1.7; }
+  .guardrail { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin:22px 0; }
+  .guardrail > div { border-left:3px solid #e5e7eb; padding:10px 14px; background:#0f172a; }
+  .guardrail strong { display:block; color:#f8fafc; margin-bottom:5px; }
+  .boundary { border:1px dashed #64748b; border-radius:6px; padding:14px 16px; color:#cbd5e1; margin-top:18px; }
+  @media (max-width:900px) {
+    .flow-grid { grid-template-columns:1fr; }
+    .flow-arrow { transform:rotate(90deg); min-height:36px; }
+    .guardrail { grid-template-columns:1fr; }
+  }
+</style>
+
+<h2>AT 完整修正：单一规则源</h2>
+<p class="subtitle">图集规则只在领域层解释一次，三维、剖面、工程量和 AI 不再各自推算。</p>
+
+<div class="flow-grid">
+  <div class="flow-node source">
+    <h3>22G101-2 证据</h3>
+    <ul>
+      <li>第 1-8 页：AT 截面与两端梯梁</li>
+      <li>第 2-7 页：Hs/(m+1)、上下纵筋、分布筋</li>
+      <li>第 2-8 页：ln/4、0.35lab/0.6lab、5d、15d</li>
+    </ul>
+  </div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-node domain">
+    <h3>AT 领域模型</h3>
+    <ul>
+      <li>非抗震 lab 精确查表</li>
+      <li>踏步、斜板、支座中心与梁边界</li>
+      <li>纵筋二维路径与分布筋站位</li>
+      <li>锚固满足性与参数校验结果</li>
+    </ul>
+  </div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-node consumer">
+    <h3>只消费派生结果</h3>
+    <ul>
+      <li>Three.js 混凝土与钢筋</li>
+      <li>纵向剖面和 1-1 横截面</li>
+      <li>下料长度、数量、重量</li>
+      <li>参数提示、HUD、AT AI 上下文</li>
+    </ul>
+  </div>
+</div>
+
+<div class="guardrail">
+  <div><strong>不重复公式</strong>几何和 React 组件不得重新计算锚固或 ln/4。</div>
+  <div><strong>路径可测试</strong>所有钢筋转折点先以普通坐标对象输出，再转换为 Three.js 曲线。</div>
+  <div><strong>失败可解释</strong>梁宽不足、保护层冲突等情况产生明确校核结果，而不是静默画错。</div>
+</div>
+
+<div class="boundary"><strong>边界：</strong>本轮只实现 AT 梯板及其支承关系。梯梁、平台板自身配筋仍属于 22G101-1，不在 AT 模型中伪造；BT/CT 等计划类型不顺带实现。</div>
+
+<div class="options">
+  <div class="option" data-choice="architecture-approved" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content"><h3>认可此架构</h3><p>继续确认几何与配筋路径设计。</p></div>
+  </div>
+  <div class="option" data-choice="architecture-revise" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content"><h3>需要调整</h3><p>在终端说明要调整的边界或数据流。</p></div>
+  </div>
+</div>

@@ -1,0 +1,475 @@
+- generic [ref=e67]:
+  - banner [ref=e68]:
+    - generic [ref=e69]:
+      - generic [ref=e70]:
+        - generic [ref=e71]: view_in_ar
+        - text: Octopus的AI钢筋平法工具
+      - generic [ref=e72]:
+        - generic [ref=e73]: search
+        - textbox "搜索参数..." [ref=e74]
+    - generic [ref=e75]:
+      - generic [ref=e76]:
+        - button "undo" [ref=e77] [cursor=pointer]
+        - button "redo" [ref=e79] [cursor=pointer]
+        - button "smart_toy" [ref=e81] [cursor=pointer]
+        - button "notifications" [ref=e83] [cursor=pointer]
+        - button "help" [ref=e85] [cursor=pointer]
+      - button "upload_file 导入" [ref=e87] [cursor=pointer]:
+        - generic [ref=e88]: upload_file
+        - text: 导入
+      - button "download 导出" [ref=e89] [cursor=pointer]:
+        - generic [ref=e90]: download
+        - text: 导出
+      - generic [ref=e91]: person
+  - generic [ref=e93]:
+    - navigation [ref=e95]:
+      - generic [ref=e96]:
+        - button "chevron_left" [ref=e97] [cursor=pointer]
+        - button "返回首页" [ref=e99] [cursor=pointer]
+      - generic [ref=e101]:
+        - button "dashboard 结构构件 chevron_right" [ref=e102] [cursor=pointer]:
+          - generic [ref=e103]: dashboard
+          - generic [ref=e104]: 结构构件
+          - generic [ref=e105]: chevron_right
+        - generic [ref=e106]:
+          - button "horizontal_rule 梁 chevron_right 可用" [ref=e108] [cursor=pointer]:
+            - generic [ref=e109]: horizontal_rule
+            - generic [ref=e110]: 梁
+            - generic [ref=e111]: chevron_right
+            - generic "可用" [ref=e112]
+          - button "view_column 柱 可用" [ref=e131] [cursor=pointer]:
+            - generic [ref=e132]: view_column
+            - generic [ref=e133]: 柱
+            - generic "可用" [ref=e134]
+          - button "rectangle 墙 规划中" [ref=e136] [cursor=pointer]:
+            - generic [ref=e137]: rectangle
+            - generic [ref=e138]: 墙
+            - generic "规划中" [ref=e139]
+          - button "layers 板 规划中" [ref=e141] [cursor=pointer]:
+            - generic [ref=e142]: layers
+            - generic [ref=e143]: 板
+            - generic "规划中" [ref=e144]
+          - generic [ref=e145]:
+            - button "stairs 楼梯 chevron_right 可用" [active] [ref=e146] [cursor=pointer]:
+              - generic [ref=e147]: stairs
+              - generic [ref=e148]: 楼梯
+              - generic [ref=e149]: chevron_right
+              - generic "可用" [ref=e150]
+            - generic [ref=e494]:
+              - button "AT 型楼梯 AT" [ref=e495] [cursor=pointer]:
+                - generic [ref=e497]: AT 型楼梯
+                - generic [ref=e498]: AT
+              - button "BT 型楼梯 BT" [disabled] [ref=e499]:
+                - generic [ref=e501]: BT 型楼梯
+                - generic [ref=e502]: BT
+              - button "CT 型楼梯 CT" [disabled] [ref=e503]:
+                - generic [ref=e505]: CT 型楼梯
+                - generic [ref=e506]: CT
+              - button "DT 型楼梯 DT" [disabled] [ref=e507]:
+                - generic [ref=e509]: DT 型楼梯
+                - generic [ref=e510]: DT
+              - button "ET 型楼梯 ET" [disabled] [ref=e511]:
+                - generic [ref=e513]: ET 型楼梯
+                - generic [ref=e514]: ET
+              - button "FT 型楼梯 FT" [disabled] [ref=e515]:
+                - generic [ref=e517]: FT 型楼梯
+                - generic [ref=e518]: FT
+              - button "GT 型楼梯 GT" [disabled] [ref=e519]:
+                - generic [ref=e521]: GT 型楼梯
+                - generic [ref=e522]: GT
+              - button "ATa 型楼梯 ATa" [disabled] [ref=e523]:
+                - generic [ref=e525]: ATa 型楼梯
+                - generic [ref=e526]: ATa
+              - button "ATb 型楼梯 ATb" [disabled] [ref=e527]:
+                - generic [ref=e529]: ATb 型楼梯
+                - generic [ref=e530]: ATb
+              - button "ATc 型楼梯 ATc" [disabled] [ref=e531]:
+                - generic [ref=e533]: ATc 型楼梯
+                - generic [ref=e534]: ATc
+              - button "BTb 型楼梯 BTb" [disabled] [ref=e535]:
+                - generic [ref=e537]: BTb 型楼梯
+                - generic [ref=e538]: BTb
+              - button "CTa 型楼梯 CTa" [disabled] [ref=e539]:
+                - generic [ref=e541]: CTa 型楼梯
+                - generic [ref=e542]: CTa
+              - button "CTb 型楼梯 CTb" [disabled] [ref=e543]:
+                - generic [ref=e545]: CTb 型楼梯
+                - generic [ref=e546]: CTb
+              - button "DTb 型楼梯 DTb" [disabled] [ref=e547]:
+                - generic [ref=e549]: DTb 型楼梯
+                - generic [ref=e550]: DTb
+          - button "foundation 基础 规划中" [ref=e152] [cursor=pointer]:
+            - generic [ref=e153]: foundation
+            - generic [ref=e154]: 基础
+            - generic "规划中" [ref=e155]
+        - button "construction 建筑结构加固 chevron_right" [ref=e156] [cursor=pointer]:
+          - generic [ref=e157]: construction
+          - generic [ref=e158]: 建筑结构加固
+          - generic [ref=e159]: chevron_right
+        - button "school 学习数据 chevron_right" [ref=e160] [cursor=pointer]:
+          - generic [ref=e161]: school
+          - generic [ref=e162]: 学习数据
+          - generic [ref=e163]: chevron_right
+      - button "settings 设置" [ref=e165] [cursor=pointer]:
+        - generic [ref=e166]: settings
+        - generic [ref=e167]: 设置
+    - main [ref=e170]:
+      - generic [ref=e171]:
+        - generic:
+          - generic [ref=e175]: KL-1(1) 300×600 渲染中
+          - generic [ref=e178]:
+            - button "TOP" [ref=e179] [cursor=pointer]
+            - button "videocam" [ref=e181] [cursor=pointer]
+            - button "deployed_code" [ref=e183] [cursor=pointer]
+            - button "view_column" [ref=e185] [cursor=pointer]
+            - button "horizontal_rule" [ref=e187] [cursor=pointer]
+            - button "grid_4x4" [ref=e189] [cursor=pointer]
+        - generic:
+          - generic [ref=e191]:
+            - generic [ref=e192]: "LOD: High"
+            - generic [ref=e193]: "箍筋: 42"
+            - generic [ref=e194]: "laE: 1000"
+          - generic [ref=e195]: 左键旋转 · 右键平移 · 滚轮缩放
+      - generic [ref=e199]:
+        - generic [ref=e200]:
+          - generic "双击放大" [ref=e201] [cursor=pointer]:
+            - generic [ref=e202]:
+              - button "力学模型" [ref=e204]
+              - button "钢筋工程量" [ref=e205]
+              - button "下料简图" [ref=e206]
+            - button "导出 CSV" [ref=e207]
+          - table [ref=e209]:
+            - rowgroup [ref=e210]:
+              - row [ref=e211]:
+                - columnheader "编号" [ref=e212]
+                - columnheader "规格" [ref=e213]
+                - columnheader "长度" [ref=e214]
+                - columnheader "数量" [ref=e215]
+                - columnheader "重量 (kg)" [ref=e216]
+            - rowgroup [ref=e217]:
+              - row [ref=e218]:
+                - cell "T1" [ref=e219]
+                - cell "HRB400 ∅25" [ref=e220]
+                - cell "9.05m" [ref=e222]
+                - cell "2" [ref=e223]
+                - cell "69.8" [ref=e224]
+              - row [ref=e225]:
+                - cell "B1" [ref=e226]
+                - cell "HRB400 ∅25" [ref=e227]
+                - cell "8.50m" [ref=e229]
+                - cell "4" [ref=e230]
+                - cell "131.1" [ref=e231]
+              - row [ref=e232]:
+                - cell "N1L" [ref=e233]
+                - cell "HRB400 ∅25" [ref=e234]
+                - cell "3.17m" [ref=e236]
+                - cell "2" [ref=e237]
+                - cell "24.5" [ref=e238]
+              - row [ref=e239]:
+                - cell "N1R" [ref=e240]
+                - cell "HRB400 ∅25" [ref=e241]
+                - cell "3.17m" [ref=e243]
+                - cell "2" [ref=e244]
+                - cell "24.5" [ref=e245]
+              - row [ref=e246]:
+                - cell "S1" [ref=e247]
+                - cell "HRB400 ∅10" [ref=e248]
+                - cell "1.99m" [ref=e250]
+                - cell "42" [ref=e251]
+                - cell "51.5" [ref=e252]
+          - generic [ref=e253]:
+            - generic [ref=e254]: 总钢筋估重
+            - generic [ref=e255]: 301.40 kg
+        - generic "双击放大" [ref=e257] [cursor=pointer]:
+          - heading "剖切面 (Section A-A)" [level=3] [ref=e258]
+          - generic "在3D模型中显示剖切面" [ref=e259]:
+            - checkbox "剖面" [ref=e260]
+            - generic [ref=e262]: 剖面
+    - complementary [ref=e280]:
+      - generic [ref=e281]:
+        - button "settings_input_component 参数" [ref=e282] [cursor=pointer]:
+          - generic [ref=e283]: settings_input_component
+          - text: 参数
+        - button "smart_toy AI 助手" [ref=e284] [cursor=pointer]:
+          - generic [ref=e285]: smart_toy
+          - text: AI 助手
+      - generic [ref=e287]:
+        - generic [ref=e288]:
+          - heading "截面参数 (Section Props)" [level=3] [ref=e289]
+          - generic [ref=e290]: "ID: KL-1"
+        - generic [ref=e291]:
+          - generic [ref=e292]:
+            - generic [ref=e293]:
+              - generic [ref=e294]: 宽度 (Width) b
+              - generic [ref=e295]: 300 mm
+            - slider [ref=e296] [cursor=pointer]: "300"
+          - generic [ref=e297]:
+            - generic [ref=e298]:
+              - generic [ref=e299]: 高度 (Height) h
+              - generic [ref=e300]: 600 mm
+            - slider [ref=e301] [cursor=pointer]: "600"
+          - generic [ref=e302]:
+            - generic [ref=e303]: 梁前边距柱前边
+            - generic [ref=e304]:
+              - slider [ref=e305] [cursor=pointer]: "150"
+              - generic [ref=e306]:
+                - spinbutton [ref=e307]: "150"
+                - generic: mm
+            - generic [ref=e308]:
+              - button "齐平 (0)" [ref=e309] [cursor=pointer]
+              - button "居中 (150)" [ref=e310] [cursor=pointer]
+              - button "反齐 (300)" [ref=e311] [cursor=pointer]
+        - generic [ref=e313]:
+          - heading "材质" [level=4] [ref=e314]
+          - generic [ref=e315]:
+            - generic [ref=e316]:
+              - generic [ref=e317]: 混凝土 (Concrete)
+              - combobox [ref=e318]:
+                - option "C25"
+                - option "C30" [selected]
+                - option "C35"
+                - option "C40"
+                - option "C45"
+                - option "C50"
+            - generic [ref=e319]:
+              - generic [ref=e320]: 主筋 (Main Rebar)
+              - combobox [ref=e321]:
+                - option "HPB300"
+                - option "HRB400" [selected]
+                - option "HRB500"
+          - generic [ref=e322]:
+            - generic [ref=e323]: 抗震等级
+            - combobox [ref=e324]:
+              - option "抗震一级（等级 Ⅰ）" [selected]
+              - option "抗震二级（等级 Ⅱ）"
+              - option "抗震三级（等级 Ⅲ）"
+              - option "抗震四级（等级 Ⅳ）"
+          - generic [ref=e326]:
+            - generic [ref=e327]: 保护层厚度 c
+            - combobox [ref=e328]:
+              - option "20 mm"
+              - option "25 mm" [selected]
+              - option "30 mm"
+              - option "35 mm"
+              - option "40 mm"
+              - option "50 mm"
+        - generic [ref=e330]:
+          - generic [ref=e331]:
+            - heading "跨列表 · 共 1 跨" [level=4] [ref=e332]
+            - generic [ref=e333]:
+              - button "add" [ref=e334] [cursor=pointer]
+              - button "remove" [disabled] [ref=e336]
+          - generic [ref=e339]:
+            - generic [ref=e340]:
+              - generic [ref=e341]: 第 1 / 1 跨
+              - generic [ref=e342]:
+                - generic [ref=e343]: ln = 6000mm
+                - generic "显示/隐藏净跨标注" [ref=e344] [cursor=pointer]:
+                  - checkbox [checked] [ref=e345]
+            - generic [ref=e347]:
+              - generic [ref=e348]:
+                - generic [ref=e349]:
+                  - generic [ref=e350]: 净跨 ln
+                  - generic [ref=e351]:
+                    - spinbutton [ref=e352]: "6000"
+                    - generic: mm
+                - generic [ref=e353]:
+                  - generic [ref=e354]: 左支座 hc
+                  - generic [ref=e355]:
+                    - spinbutton [ref=e356]: "600"
+                    - generic: mm
+                - generic [ref=e357]:
+                  - generic [ref=e358]: 右支座 hc
+                  - generic [ref=e359]:
+                    - spinbutton [ref=e360]: "600"
+                    - generic: mm
+              - generic [ref=e361]:
+                - generic [ref=e362]: 上部钢筋
+                - generic [ref=e364]:
+                  - button "上部贯通筋" [ref=e365] [cursor=pointer]
+                  - button "架立筋" [ref=e366] [cursor=pointer]
+                - generic [ref=e367]:
+                  - generic [ref=e368]:
+                    - generic [ref=e369]: 上部贯通筋
+                    - generic [ref=e370]: 2⌀25 HRB400
+                  - generic [ref=e371]:
+                    - combobox [ref=e372]:
+                      - option "HPB300"
+                      - option "HRB400" [selected]
+                      - option "HRB500"
+                    - combobox [ref=e373]:
+                      - option "⌀6"
+                      - option "⌀8"
+                      - option "⌀10"
+                      - option "⌀12"
+                      - option "⌀14"
+                      - option "⌀16"
+                      - option "⌀18"
+                      - option "⌀20"
+                      - option "⌀22"
+                      - option "⌀25" [selected]
+                      - option "⌀28"
+                      - option "⌀32"
+                    - spinbutton [ref=e374]: "2"
+                - generic [ref=e375]:
+                  - generic [ref=e377]:
+                    - generic [ref=e378]:
+                      - generic [ref=e379]: 左支座负筋
+                      - generic [ref=e380]: 2⌀25 HRB400
+                    - generic [ref=e381]:
+                      - combobox [ref=e382]:
+                        - option "HPB300"
+                        - option "HRB400" [selected]
+                        - option "HRB500"
+                      - combobox [ref=e383]:
+                        - option "⌀6"
+                        - option "⌀8"
+                        - option "⌀10"
+                        - option "⌀12"
+                        - option "⌀14"
+                        - option "⌀16"
+                        - option "⌀18"
+                        - option "⌀20"
+                        - option "⌀22"
+                        - option "⌀25" [selected]
+                        - option "⌀28"
+                        - option "⌀32"
+                      - spinbutton [ref=e384]: "2"
+                  - generic "显示/隐藏左支座负筋伸出长度标注" [ref=e385] [cursor=pointer]:
+                    - checkbox [checked] [ref=e386]
+                - generic [ref=e388]:
+                  - generic [ref=e390]:
+                    - generic [ref=e391]:
+                      - generic [ref=e392]: 右支座负筋
+                      - generic [ref=e393]: 2⌀25 HRB400
+                    - generic [ref=e394]:
+                      - combobox [ref=e395]:
+                        - option "HPB300"
+                        - option "HRB400" [selected]
+                        - option "HRB500"
+                      - combobox [ref=e396]:
+                        - option "⌀6"
+                        - option "⌀8"
+                        - option "⌀10"
+                        - option "⌀12"
+                        - option "⌀14"
+                        - option "⌀16"
+                        - option "⌀18"
+                        - option "⌀20"
+                        - option "⌀22"
+                        - option "⌀25" [selected]
+                        - option "⌀28"
+                        - option "⌀32"
+                      - spinbutton [ref=e397]: "2"
+                  - generic "显示/隐藏右支座负筋伸出长度标注" [ref=e398] [cursor=pointer]:
+                    - checkbox [checked] [ref=e399]
+              - generic [ref=e402]:
+                - generic [ref=e403]: 中部钢筋
+                - checkbox [ref=e406]
+              - generic [ref=e408]:
+                - generic [ref=e409]: 下部钢筋
+                - generic [ref=e411]:
+                  - generic [ref=e412]:
+                    - generic [ref=e413]: 下部一排纵筋
+                    - generic [ref=e414]: 4⌀25 HRB400
+                  - generic [ref=e415]:
+                    - combobox [ref=e416]:
+                      - option "HPB300"
+                      - option "HRB400" [selected]
+                      - option "HRB500"
+                    - combobox [ref=e417]:
+                      - option "⌀6"
+                      - option "⌀8"
+                      - option "⌀10"
+                      - option "⌀12"
+                      - option "⌀14"
+                      - option "⌀16"
+                      - option "⌀18"
+                      - option "⌀20"
+                      - option "⌀22"
+                      - option "⌀25" [selected]
+                      - option "⌀28"
+                      - option "⌀32"
+                    - spinbutton [ref=e418]: "4"
+                - generic [ref=e419]: 单排最大 5 根
+              - generic [ref=e421]:
+                - generic [ref=e422]:
+                  - generic [ref=e423]:
+                    - generic [ref=e424]: grid_4x4
+                    - text: 箍筋
+                  - generic "显示/隐藏加密区长度标注" [ref=e425] [cursor=pointer]:
+                    - checkbox [checked] [ref=e426]
+                - generic [ref=e428]:
+                  - generic [ref=e429]:
+                    - generic [ref=e430]: 规格（等级 / 直径 / 肢数）
+                    - generic [ref=e431]: 2⌀10 HRB400
+                  - generic [ref=e432]:
+                    - combobox [ref=e433]:
+                      - option "HPB300"
+                      - option "HRB400" [selected]
+                      - option "HRB500"
+                    - combobox [ref=e434]:
+                      - option "⌀6"
+                      - option "⌀8"
+                      - option "⌀10" [selected]
+                      - option "⌀12"
+                    - spinbutton [ref=e435]: "2"
+                - generic [ref=e436]:
+                  - generic [ref=e437]:
+                    - generic [ref=e438]: 加密间距
+                    - generic [ref=e439]:
+                      - spinbutton [ref=e440]: "100"
+                      - generic: mm
+                  - generic [ref=e441]:
+                    - generic [ref=e442]: 非加密间距
+                    - generic [ref=e443]:
+                      - spinbutton [ref=e444]: "200"
+                      - generic: mm
+        - button "应用更新" [ref=e445] [cursor=pointer]
+      - link "monitoring 诊断 Diagnostics" [ref=e447] [cursor=pointer]:
+        - /url: "#"
+        - generic [ref=e448]: monitoring
+        - text: 诊断 Diagnostics
+    - generic [ref=e450]:
+      - generic [ref=e451]:
+        - generic [ref=e452]:
+          - generic [ref=e453]: smart_toy
+          - generic [ref=e454]: 结构助手
+        - generic [ref=e456]:
+          - combobox [ref=e457] [cursor=pointer]:
+            - option "DeepSeek" [selected]
+          - combobox "默认快速模型，适合平法问答和参数解释。" [ref=e458] [cursor=pointer]:
+            - option "★ DeepSeek V4 Flash" [selected]
+            - option "DeepSeek V4 Pro"
+            - option "DeepSeek Chat (旧)"
+            - option "DeepSeek Reasoner (旧)"
+          - button "settings" [ref=e459] [cursor=pointer]
+      - generic [ref=e462]:
+        - generic [ref=e463]: smart_toy
+        - generic [ref=e466]:
+          - paragraph [ref=e467]: 推荐问题
+          - button "anchor C35 混凝土 HRB400 抗震三级，锚固长度多少？ chevron_right" [ref=e468] [cursor=pointer]:
+            - generic [ref=e469]: anchor
+            - generic [ref=e470]: C35 混凝土 HRB400 抗震三级，锚固长度多少？
+            - generic [ref=e471]: chevron_right
+          - button "dashboard 框架梁箍筋加密区范围怎么确定？ chevron_right" [ref=e472] [cursor=pointer]:
+            - generic [ref=e473]: dashboard
+            - generic [ref=e474]: 框架梁箍筋加密区范围怎么确定？
+            - generic [ref=e475]: chevron_right
+          - button "calculate 梁截面 300×600，As 怎么计算？ chevron_right" [ref=e476] [cursor=pointer]:
+            - generic [ref=e477]: calculate
+            - generic [ref=e478]: 梁截面 300×600，As 怎么计算？
+            - generic [ref=e479]: chevron_right
+          - button "compare_arrows 通长筋和架立筋有什么区别？ chevron_right" [ref=e480] [cursor=pointer]:
+            - generic [ref=e481]: compare_arrows
+            - generic [ref=e482]: 通长筋和架立筋有什么区别？
+            - generic [ref=e483]: chevron_right
+          - button "menu_book GB 50011 对框架柱轴压比有什么限制？ chevron_right" [ref=e484] [cursor=pointer]:
+            - generic [ref=e485]: menu_book
+            - generic [ref=e486]: GB 50011 对框架柱轴压比有什么限制？
+            - generic [ref=e487]: chevron_right
+      - generic [ref=e488]:
+        - generic [ref=e489]:
+          - textbox "问我任何问题… (Enter 发送，Shift+Enter 换行)" [ref=e490]
+          - button "send" [disabled] [ref=e491]
+        - paragraph [ref=e493]: AI 回复仅供参考，请结合 22G101 图集核实

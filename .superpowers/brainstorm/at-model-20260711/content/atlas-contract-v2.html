@@ -1,0 +1,63 @@
+<style>
+  .atlas-band { margin:24px 0 30px; border-top:4px solid #f59e0b; padding-top:16px; }
+  .atlas-band.rebar { border-top-color:#22c55e; }
+  .atlas-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin:16px 0; }
+  .atlas-frame { border:1px solid #374151; border-radius:6px; overflow:hidden; background:#fff; }
+  .atlas-frame img { display:block; width:100%; height:270px; object-fit:cover; }
+  .atlas-frame figcaption { padding:9px 11px; background:#111827; color:#cbd5e1; font-size:13px; }
+  .contract { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin:16px 0; }
+  .contract > div { background:#111827; border-left:3px solid #38bdf8; padding:13px 15px; color:#cbd5e1; line-height:1.6; }
+  .contract strong { color:#f8fafc; display:block; margin-bottom:5px; }
+  .source { color:#fde68a; font-family:ui-monospace,Consolas,monospace; }
+  .rebar-layout { display:grid; grid-template-columns:1.45fr 0.55fr; gap:12px; margin:16px 0; }
+  .rebar-layout img { width:100%; height:520px; object-fit:contain; background:#fff; border:1px solid #374151; border-radius:6px; }
+  .acceptance { border:1px solid #475569; border-radius:6px; padding:15px; margin:18px 0; color:#cbd5e1; }
+  @media (max-width:950px) { .atlas-grid,.contract,.rebar-layout { grid-template-columns:1fr; } .atlas-frame img { height:240px; } .rebar-layout img { height:auto; } }
+</style>
+
+<h2>修订：只以 1-8 定形，以 2-8 定筋</h2>
+<p class="subtitle">实现和验收分别绑定到两张正式构造页，不再用通用楼梯经验补足形状或钢筋。</p>
+
+<section class="atlas-band">
+  <h3>第一基准：1-8 页 AT 型楼梯形状</h3>
+  <div class="atlas-grid">
+    <figure class="atlas-frame"><img src="/files/at-1-8-section.png" alt="AT 型楼梯纵向截面"><figcaption>纵向截面：踏步段直接支承于低端、高端梯梁</figcaption></figure>
+    <figure class="atlas-frame"><img src="/files/at-1-8-plan.png" alt="AT 型楼梯平面"><figcaption>平面：两道梯梁垂直于梯板走向并伸出梯板两侧</figcaption></figure>
+    <figure class="atlas-frame"><img src="/files/at-1-8-iso.png" alt="AT 型楼梯轴测"><figcaption>轴测：只有踏步段，没有 BT 型低端平板</figcaption></figure>
+  </div>
+  <div class="contract">
+    <div><strong>踏步数量关系</strong><span class="source">Hs = hs × (m+1)</span>，<span class="source">ln = bs × m</span>。模型生成 m 个踏面宽和 m+1 个踢面高。</div>
+    <div><strong>AT 构成边界</strong>两梯梁之间全部为踏步段；不得添加低端平板、中位平板或高端平板。</div>
+    <div><strong>斜腹板与支座</strong>斜腹板底线与踏步根连线平行、法向厚度为 h；在 <span class="source">x=0</span> 与 <span class="source">x=ln</span> 的梯梁内侧面竖直截断，和梯梁形成完整端面接触。</div>
+    <div><strong>梯梁三向尺寸</strong>宽度沿梯板走向、高度竖向、长度横跨梯板。新增横向长度参数，必须不小于梯板宽度，并在默认模型中显示两侧伸出。</div>
+    <div><strong>标高关系</strong>低端梯梁顶与首个踏面同标高；高端梯梁顶与 <span class="source">Hs</span> 同标高，最后一个踢面落在高端梯梁内侧面。</div>
+    <div><strong>三视图一致</strong>3D、纵剖和平面投影必须由同一混凝土剖面及梯梁尺寸派生，禁止各自拼形。</div>
+  </div>
+</section>
+
+<section class="atlas-band rebar">
+  <h3>第二基准：2-8 页 AT 型楼梯板配筋</h3>
+  <div class="rebar-layout">
+    <img src="/files/at-2-8-rebar.png" alt="AT 型楼梯板配筋构造第 2-8 页">
+    <img src="/files/at-2-8-section-1-1.png" alt="AT 梯板 1-1 配筋截面">
+  </div>
+  <div class="contract">
+    <div><strong>下部纵筋</strong>沿梯板底部连续贯通；两端沿斜向伸入梯梁，至少越过支座中线 <span class="source">5d</span>，端部向下弯折 <span class="source">15d</span>。</div>
+    <div><strong>上部纵筋</strong>高、低端分别设置；向跨内伸出长度按水平投影 <span class="source">ln/4</span>，不能直接当作斜向长度。</div>
+    <div><strong>上筋支座端</strong>沿斜向伸至梯梁边，锚固长度按设计选择 <span class="source">0.35lab</span> 或 <span class="source">0.6lab</span>，梁边端向下弯折 <span class="source">15d</span>。</div>
+    <div><strong>分布筋与保护层</strong>依据 1-1 截面布置上下两层横向分布筋；所有钢筋中心线按 <span class="source">保护层 + 半径</span> 放在混凝土内部。</div>
+    <div><strong>锚固数值</strong>使用 22G101-2 非抗震 <span class="source">lab</span> 查表，不再复用三级抗震 <span class="source">laE</span> 近似。</div>
+    <div><strong>虚线做法边界</strong>直接伸入平台板并满足 <span class="source">la</span> 是有平台条件时的替代做法；AT 默认实体只有两端梯梁，因此默认采用图中实线弯锚，不凭空增加平台板。</div>
+  </div>
+</section>
+
+<div class="acceptance"><strong>验收方式：</strong>先用 1-8 页逐项核对无钢筋混凝土模型，再打开钢筋按 2-8 页核对路径和 1-1 层位；任一页不符合都不视为 AT 完成。</div>
+
+<div class="options">
+  <div class="option" data-choice="atlas-contract-approved" onclick="toggleSelect(this)">
+    <div class="letter">A</div><div class="content"><h3>认可修订后的图集契约</h3><p>继续确认校核、界面和测试设计。</p></div>
+  </div>
+  <div class="option" data-choice="atlas-contract-revise" onclick="toggleSelect(this)">
+    <div class="letter">B</div><div class="content"><h3>仍需调整</h3><p>请指出 1-8 形状或 2-8 钢筋中的具体偏差。</p></div>
+  </div>
+</div>
