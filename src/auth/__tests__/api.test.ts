@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   credentialsComplete,
   normalizeCredentials,
-  fetchSchools,
   login,
 } from '../api';
 
@@ -16,38 +15,25 @@ function mockResponse(status: number, body: unknown): Response {
 
 describe('credential helpers', () => {
   it('normalizes by trimming', () => {
-    expect(normalizeCredentials({ schoolId: ' s ', name: ' 张三 ', identityCode: ' 1 ' })).toEqual({
-      schoolId: 's',
+    expect(normalizeCredentials({ name: ' 张三 ', identityCode: ' 1 ' })).toEqual({
       name: '张三',
       identityCode: '1',
     });
   });
 
-  it('credentialsComplete requires all three fields', () => {
-    expect(credentialsComplete({ schoolId: 's', name: 'a', identityCode: 'b' })).toBe(true);
-    expect(credentialsComplete({ schoolId: ' ', name: 'a', identityCode: 'b' })).toBe(false);
-    expect(credentialsComplete({ schoolId: 's', name: '', identityCode: 'b' })).toBe(false);
-  });
-});
-
-describe('fetchSchools', () => {
-  it('returns the schools array on success', async () => {
-    const f = vi.fn().mockResolvedValue(mockResponse(200, { schools: [{ id: 's1', name: 'A' }] }));
-    await expect(fetchSchools(f)).resolves.toEqual([{ id: 's1', name: 'A' }]);
-  });
-
-  it('throws when the request fails', async () => {
-    const f = vi.fn().mockResolvedValue(mockResponse(500, {}));
-    await expect(fetchSchools(f)).rejects.toThrow();
+  it('credentialsComplete requires both fields', () => {
+    expect(credentialsComplete({ name: 'a', identityCode: 'b' })).toBe(true);
+    expect(credentialsComplete({ name: ' ', identityCode: 'b' })).toBe(false);
+    expect(credentialsComplete({ name: 'a', identityCode: '' })).toBe(false);
   });
 });
 
 describe('login', () => {
-  const creds = { schoolId: 's1', name: '张三', identityCode: '2024' };
+  const creds = { name: '张三', identityCode: '2024' };
 
   it('short-circuits invalid input without calling the network', async () => {
     const f = vi.fn();
-    await expect(login({ schoolId: '', name: '', identityCode: '' }, f)).resolves.toEqual({
+    await expect(login({ name: '', identityCode: '' }, f)).resolves.toEqual({
       ok: false,
       reason: 'invalid_input',
     });

@@ -1,9 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import {
-  fetchSchools,
   login as loginRequest,
   credentialsComplete,
-  type School,
 } from '../auth/api';
 import { makeSession, saveSession } from '../auth/session';
 
@@ -12,11 +10,10 @@ interface Props {
 }
 
 const ERROR_TEXT: Record<string, string> = {
-  not_authorized: '学校、姓名或学号/工号不匹配，请核对后重试。',
-  invalid_input: '请填写学校、姓名和学号/工号。',
+  not_authorized: '姓名或学号/工号不匹配，请核对后重试。',
+  invalid_input: '请填写姓名和学号/工号。',
   server_error: '服务暂时不可用，请稍后再试。',
   network_error: '网络异常，无法连接服务器。',
-  schools_unavailable: '学校列表加载失败，请刷新重试。',
 };
 
 const FEATURES = [
@@ -54,30 +51,13 @@ const FEATURES = [
 
 export function LandingPage({ onEnter }: Props) {
   const [leaving, setLeaving] = useState(false);
-  const [schools, setSchools] = useState<School[]>([]);
-  const [schoolsError, setSchoolsError] = useState(false);
-  const [schoolId, setSchoolId] = useState('');
   const [name, setName] = useState('');
   const [identityCode, setIdentityCode] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  useEffect(() => {
-    let alive = true;
-    fetchSchools()
-      .then((list) => {
-        if (alive) setSchools(list);
-      })
-      .catch(() => {
-        if (alive) setSchoolsError(true);
-      });
-    return () => {
-      alive = false;
-    };
-  }, []);
-
   const canSubmit =
-    !submitting && credentialsComplete({ schoolId, name, identityCode });
+    !submitting && credentialsComplete({ name, identityCode });
 
   const handleEnter = () => {
     setLeaving(true);
@@ -87,12 +67,12 @@ export function LandingPage({ onEnter }: Props) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    if (!credentialsComplete({ schoolId, name, identityCode })) {
+    if (!credentialsComplete({ name, identityCode })) {
       setError(ERROR_TEXT.invalid_input);
       return;
     }
     setSubmitting(true);
-    const result = await loginRequest({ schoolId, name, identityCode });
+    const result = await loginRequest({ name, identityCode });
     setSubmitting(false);
     if (result.ok) {
       saveSession(makeSession(result.school, result.name));
@@ -181,23 +161,6 @@ export function LandingPage({ onEnter }: Props) {
             <span className="material-symbols-outlined text-primary-fixed-dim text-[20px]">login</span>
             登录以进入系统
           </div>
-
-          <label className="block text-body-sm text-on-surface-variant mb-1.5">学校</label>
-          <select
-            value={schoolId}
-            onChange={(e) => setSchoolId(e.target.value)}
-            disabled={schoolsError}
-            className="w-full mb-4 px-3 py-2.5 rounded-DEFAULT bg-background/60 border border-white/10 text-on-surface text-body-md focus:outline-none focus:border-primary-fixed-dim disabled:opacity-50"
-          >
-            <option value="" disabled>
-              {schoolsError ? '学校列表加载失败' : '请选择学校'}
-            </option>
-            {schools.map((s) => (
-              <option key={String(s.id)} value={String(s.id)}>
-                {s.name}
-              </option>
-            ))}
-          </select>
 
           <label className="block text-body-sm text-on-surface-variant mb-1.5">姓名</label>
           <input

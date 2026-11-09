@@ -62,17 +62,19 @@ export function authMockPlugin(): Plugin {
         } catch {
           return send(res, 400, { ok: false, error: 'invalid_json' });
         }
-        const schoolId = String(parsed?.schoolId ?? '').trim();
         const name = String(parsed?.name ?? '').trim();
         const identityCode = String(parsed?.identityCode ?? '').trim();
-        if (!schoolId || !name || !identityCode) {
+        if (!name || !identityCode) {
           return send(res, 400, { ok: false, error: 'invalid_input' });
         }
-        const school = SCHOOLS.find((s) => s.id === schoolId && s.isActive);
         const user = ALLOWED_USERS.find(
-          (u) => u.schoolId === schoolId && u.name === name && u.identityCode === identityCode && u.isActive,
+          (u) => u.name === name && u.identityCode === identityCode && u.isActive,
         );
-        if (!school || !user) {
+        if (!user) {
+          return send(res, 401, { ok: false, error: 'not_authorized' });
+        }
+        const school = SCHOOLS.find((s) => s.id === user.schoolId && s.isActive);
+        if (!school) {
           return send(res, 401, { ok: false, error: 'not_authorized' });
         }
         send(res, 200, { ok: true, school: { id: school.id, name: school.name }, name });

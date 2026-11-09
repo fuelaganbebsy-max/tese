@@ -3,17 +3,16 @@ import { parseLoginBody, buildAllowedUsersQuery, evaluateMatch } from '../login'
 
 describe('parseLoginBody', () => {
   it('trims and accepts complete payloads', () => {
-    expect(parseLoginBody({ schoolId: ' s1 ', name: ' 张三 ', identityCode: ' 2024 ' })).toEqual({
-      schoolId: 's1',
+    expect(parseLoginBody({ name: ' 张三 ', identityCode: ' 2024 ' })).toEqual({
       name: '张三',
       identityCode: '2024',
     });
   });
 
   it('rejects empty or missing fields', () => {
-    expect(parseLoginBody({ schoolId: '', name: 'a', identityCode: 'b' })).toBeNull();
-    expect(parseLoginBody({ schoolId: 's', name: '   ', identityCode: 'b' })).toBeNull();
-    expect(parseLoginBody({ schoolId: 's', name: 'a' })).toBeNull();
+    expect(parseLoginBody({ name: '', identityCode: 'b' })).toBeNull();
+    expect(parseLoginBody({ name: '   ', identityCode: 'b' })).toBeNull();
+    expect(parseLoginBody({ name: 'a' })).toBeNull();
   });
 
   it('rejects non-object input', () => {
@@ -23,9 +22,9 @@ describe('parseLoginBody', () => {
 });
 
 describe('buildAllowedUsersQuery', () => {
-  it('encodes the three matching filters and active flag', () => {
-    const q = buildAllowedUsersQuery({ schoolId: 's1', name: '张三', identityCode: '20+24' });
-    expect(q).toContain('school_id=eq.s1');
+  it('encodes the matching filters and active flag', () => {
+    const q = buildAllowedUsersQuery({ name: '张三', identityCode: '20+24' });
+    expect(q).not.toContain('school_id=eq.');
     expect(q).toContain(`name=eq.${encodeURIComponent('张三')}`);
     expect(q).toContain('identity_code=eq.20%2B24');
     expect(q).toContain('is_active=eq.true');
@@ -34,7 +33,7 @@ describe('buildAllowedUsersQuery', () => {
 });
 
 describe('evaluateMatch', () => {
-  const input = { schoolId: 's1', name: '张三', identityCode: '2024' };
+  const input = { name: '张三', identityCode: '2024' };
 
   it('passes when user matches an active school', () => {
     const rows = [

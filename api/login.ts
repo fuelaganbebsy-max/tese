@@ -5,7 +5,6 @@
 import { readSupabaseEnv, supabaseSelect } from '../netlify/functions/_shared/supabase';
 
 export interface LoginInput {
-  schoolId: string;
   name: string;
   identityCode: string;
 }
@@ -28,18 +27,16 @@ export function jsonResponse(status: number, body: unknown): Response {
 export function parseLoginBody(raw: unknown): LoginInput | null {
   if (typeof raw !== 'object' || raw === null) return null;
   const body = raw as Record<string, unknown>;
-  const schoolId = String(body.schoolId ?? '').trim();
   const name = String(body.name ?? '').trim();
   const identityCode = String(body.identityCode ?? '').trim();
-  if (!schoolId || !name || !identityCode) return null;
-  return { schoolId, name, identityCode };
+  if (!name || !identityCode) return null;
+  return { name, identityCode };
 }
 
 /** Builds the URL-encoded PostgREST query for the allowed_users lookup. */
 export function buildAllowedUsersQuery(input: LoginInput): string {
   const params = new URLSearchParams();
   params.set('select', 'id,name,identity_code,school_id,schools(id,name,is_active)');
-  params.set('school_id', `eq.${input.schoolId}`);
   params.set('name', `eq.${input.name}`);
   params.set('identity_code', `eq.${input.identityCode}`);
   params.set('is_active', 'eq.true');
