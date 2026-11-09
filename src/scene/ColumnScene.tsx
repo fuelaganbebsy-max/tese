@@ -961,7 +961,7 @@ export function ColumnScene() {
       <hemisphereLight args={["#7dd3fc", "#1e293b", 0.6]} />
       <directionalLight position={[camDist, totalH * 1.5, camDist * 0.5]} intensity={1.2} color="#e0f2fe" />
       <directionalLight position={[-camDist * 0.3, cy, -camDist * 0.3]} intensity={0.4} color="#94a3b8" />
-      <Environment preset="city" background={false} />
+      <Environment files="/hdri/potsdamer_platz_1k.hdr" background={false} />
 
       <ColumnBeams params={params} />
       <ColumnSlabs params={params} show={view.showConcrete} />
