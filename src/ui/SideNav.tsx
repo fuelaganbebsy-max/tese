@@ -17,7 +17,7 @@ const STATUS_DOT: Record<string, string> = {
   planned: 'bg-white/20',
 };
 
-export function SideNav({ onBack }: { onBack?: () => void }) {
+export function SideNav() {
   const collapsed = useBeamStore((s) => s.ui.sideNavCollapsed);
   const setUi = useBeamStore((s) => s.setUi);
   const activeType = useMemberStore((s) => s.activeType);
@@ -100,12 +100,6 @@ export function SideNav({ onBack }: { onBack?: () => void }) {
           className="flex items-center justify-center p-2.5 rounded-lg border border-white/10 text-on-surface-variant hover:bg-white/5 hover:text-on-surface transition-colors duration-200 active:scale-95 shrink-0"
         >
           <span className="material-symbols-outlined text-[18px]">chevron_left</span>
-        </button>
-        <button
-          onClick={onBack}
-          className="flex items-center justify-center gap-2 flex-1 px-3 py-2.5 rounded-lg border border-white/10 text-on-surface-variant hover:bg-white/5 hover:text-on-surface transition-colors duration-200 active:scale-95"
-        >
-          <span className="font-label-numeric text-label-numeric font-mono">返回首页</span>
         </button>
       </div>
 

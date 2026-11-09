@@ -23,7 +23,7 @@ const RIGHT_MIN = 200;
 const RIGHT_MAX = 600;
 const DATA_MIN = 80;
 
-export default function App({ onBack }: { onBack?: () => void }) {
+export default function App() {
   useKeyboardShortcuts();
 
   const [sideW, setSideW] = useState(240);
@@ -80,7 +80,7 @@ export default function App({ onBack }: { onBack?: () => void }) {
       <div className="flex flex-1 overflow-hidden relative w-full">
         {/* Left: SideNav */}
         <div className="shrink-0 h-full" style={{ width: effectiveSideW }}>
-          <SideNav onBack={onBack} />
+          <SideNav />
         </div>
         <ResizeHandle direction="horizontal" onResize={handleSideResize} />
 

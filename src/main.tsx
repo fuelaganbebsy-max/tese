@@ -1,7 +1,5 @@
-import React, { Suspense, useState } from 'react';
+import React, { Suspense } from 'react';
 import ReactDOM from 'react-dom/client';
-import { LandingPage } from './ui/LandingPage';
-import { loadSession, clearSession } from './auth/session';
 import './index.css';
 import { lazyWithReload } from './lazyWithReload';
 
@@ -37,19 +35,11 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { err
 }
 
 function Root() {
-  // 同一天内已通过登录则直接进入系统，跨天自动失效需重新登录。
-  const [showApp, setShowApp] = useState(() => loadSession() !== null);
-  const handleBack = () => {
-    clearSession();
-    setShowApp(false);
-  };
-  return showApp
-    ? (
-      <Suspense fallback={<div className="h-screen w-screen bg-background" />}>
-        <App onBack={handleBack} />
-      </Suspense>
-    )
-    : <LandingPage onEnter={() => setShowApp(true)} />;
+  return (
+    <Suspense fallback={<div className="h-screen w-screen bg-background" />}>
+      <App />
+    </Suspense>
+  );
 }
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
